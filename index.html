@@ -673,14 +673,22 @@ const SHARED_SECRET = '261220faa3ee95eea48c2b8dee4d64fe';
 const LICENSE_STORAGE_KEY = 'cobra_license_key';
 let LICENSE_KEY = localStorage.getItem(LICENSE_STORAGE_KEY) || '';
 
-async function llamarServidor(action, extra){
-  extra = extra || {};
+async function llamarServidor(action, extra = {}) {
   const res = await fetch(API_URL, {
     method: 'POST',
-    body: JSON.stringify({ action, secret: SHARED_SECRET, licenseKey: LICENSE_KEY, clientDomain: window.location.hostname, ...extra })
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify({
+      action,
+      secret: SHARED_SECRET,
+      licenseKey: LICENSE_KEY,
+      clientDomain: window.location.hostname,
+      ...extra
+    })
   });
   const data = await res.json();
-  if(data.ok === false) throw new Error(data.error || 'Error del servidor');
+  if (data.ok === false) throw new Error(data.error || 'Error del servidor');
   return data;
 }
 
