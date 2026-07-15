@@ -1,0 +1,3044 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COBRA PERÚ · Ingreso de Liquidaciones</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#061b26;
+  --panel:#0a2735;
+  --panel-hi:#0f3346;
+  --border:#163f54;
+  --border-hi:#1f5269;
+  --text:#d9ecf2;
+  --text-dim:#6b8e9c;
+  --text-mute:#4a6b78;
+  --accent:#1aa6b7;
+  --accent2:#ff414d;
+  --accent3:#f56a79;
+  --ok:#2fd18f;
+  --radius:12px;
+  font-size:16px;
+}
+*{box-sizing:border-box;}
+::placeholder{color:var(--text-mute);}
+body{
+  margin:0;
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(26,166,183,0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(255,65,77,0.06), transparent 60%),
+    radial-gradient(700px 400px at 50% 50%, rgba(245,106,121,0.03), transparent 70%),
+    var(--bg);
+  min-height:100vh;
+}
+.mono, .items-table, .summary-table, table.budget-table, .qty-pill, .grand-total b { font-family:'JetBrains Mono', 'Menlo', monospace; }
+
+header{
+  background:linear-gradient(180deg, var(--panel) 0%, var(--bg) 160%);
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+  padding:20px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+}
+header .brand{display:flex;align-items:center;gap:14px;}
+header .brand svg{flex:0 0 auto;filter:drop-shadow(0 0 10px rgba(26,166,183,.45));}
+header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+header p{margin:3px 0 0;font-size:11.5px;color:var(--text-dim);letter-spacing:.02em;}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{
+  border:none;
+  border-radius:8px;
+  padding:9px 14px;
+  font-size:12.5px;
+  font-weight:700;
+  letter-spacing:.03em;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-family:inherit;
+  transition:transform .08s ease, filter .15s ease, border-color .15s ease, background .15s ease;
+}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:rgba(26,166,183,.16);color:var(--accent);border:1px solid rgba(26,166,183,.45);box-shadow:0 0 14px rgba(26,166,183,.12);}
+.btn-primary:hover{background:rgba(26,166,183,.26);}
+.btn-coral{background:rgba(255,65,77,.16);color:#ff8da0;border:1px solid rgba(255,65,77,.45);}
+.btn-coral:hover{background:rgba(255,65,77,.26);}
+.btn-ghost{background:#ffffff0d;color:var(--text-dim);border:1px solid var(--border-hi);}
+.btn-ghost:hover{background:#ffffff1a;color:var(--text);}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid rgba(26,166,183,.45);}
+.btn-outline:hover{background:rgba(26,166,183,.10);}
+.btn-small{padding:6px 10px;font-size:11px;}
+.btn-danger{background:transparent;color:var(--accent3);border:1px solid rgba(255,65,77,.4);}
+.btn-danger:hover{background:rgba(255,65,77,.08);}
+
+nav.tabs{
+  display:flex;
+  gap:4px;
+  background:var(--bg);
+  padding:8px 16px 0;
+  border-bottom:1px solid var(--border);
+  overflow-x:auto;
+}
+nav.tabs button{
+  border:none;
+  background:transparent;
+  padding:10px 16px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-dim);
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  white-space:nowrap;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  border-radius:6px 6px 0 0;
+  font-family:inherit;
+  transition:color .15s, background .15s;
+}
+nav.tabs button:hover{color:var(--text);}
+nav.tabs button.active{
+  color:var(--accent2);
+  background:var(--panel);
+  border-bottom-color:var(--accent2);
+}
+
+main{max-width:1100px;margin:0 auto;padding:20px 16px 80px;}
+.panel{display:none;}
+.panel.active{display:block;}
+
+.panel-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.panel-head h2{font-size:15px;margin:0 0 4px;color:var(--text);text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+.panel-head p{margin:0;font-size:12px;color:var(--text-dim);max-width:560px;}
+.panel-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+.via-card{
+  background:linear-gradient(180deg, var(--panel) 0%, var(--bg) 160%);
+  border:1px solid var(--border);
+  border-top:2px solid var(--accent);
+  border-radius:var(--radius);
+  margin-bottom:14px;
+  overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,.25);
+}
+.via-head{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  padding:12px 14px;
+  background:var(--panel-hi);
+  border-bottom:1px solid var(--border);
+}
+.via-badge{
+  background:rgba(26,166,183,.16);
+  color:var(--accent);
+  border:1px solid rgba(26,166,183,.4);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.04em;
+  border-radius:20px;
+  padding:3px 10px;
+  flex:0 0 auto;
+  text-transform:uppercase;
+}
+.via-head .via-badge{align-self:center;}
+.via-head > .remove-x{align-self:center;}
+.via-head input[type=text]{
+  flex:1;
+  min-width:120px;
+  background:transparent;
+  border:none;
+  border-bottom:1px solid transparent;
+  color:var(--text);
+  border-radius:0;
+  padding:7px 2px;
+  font-size:13px;
+  font-family:inherit;
+}
+.via-head input[type=text]:hover{border-bottom-color:var(--border);}
+.via-head input[type=text]:focus{outline:none;border-bottom-color:var(--accent);}
+.via-head .field-mini{display:flex;flex-direction:column;gap:2px;}
+.via-head .field-mini label{font-size:10px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+.via-head .field-mini input{width:130px;}
+.via-head .grupo-field{flex:1.4;min-width:200px;}
+.via-head .grupo-field input{width:100%;font-size:14px;padding:9px 10px;}
+.via-body{padding:12px 14px;}
+
+/* Ficha Resane: encabezado + detalle en una sola fila (más compacta). */
+.via-head-resane{flex-wrap:nowrap;}
+.via-head-resane input[type=text]{min-width:90px;flex:1.1;}
+.via-head-resane .field-mini-resane input{
+  background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:7px 2px;font-size:12px;font-family:inherit;text-align:center;
+}
+.via-head-resane .field-mini-resane input:hover{border-bottom-color:var(--border);}
+.via-head-resane .field-mini-resane input:focus{outline:none;border-bottom-color:var(--accent);}
+.via-head-resane .field-mini-resane input:disabled{opacity:.4;cursor:not-allowed;}
+.via-head-resane .field-plano input,
+.via-head-resane .field-ejecutor input{width:92px;text-align:left;}
+.via-head-resane .field-largo input,
+.via-head-resane .field-ancho input,
+.via-head-resane .field-espesor input,
+.via-head-resane .field-descontar input{width:60px;}
+.via-head-resane .field-readonly label{color:var(--accent);}
+.via-head-resane .field-readonly input{
+  width:88px;background:rgba(26,166,183,.10);border-color:rgba(26,166,183,.4);color:var(--accent);
+  font-weight:700;font-family:'JetBrains Mono','Menlo',monospace;cursor:default;text-align:center;
+}
+.via-head-resane .field-disabled label{color:var(--text-mute);}
+@media (max-width:900px){
+  .via-head-resane{flex-wrap:wrap;align-items:flex-start;}
+}
+
+.items-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}
+.items-table th{
+  text-align:left;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--text-mute);
+  font-weight:600;
+  padding:8px 8px;
+  border-bottom:1px solid var(--border);
+  background:rgba(255,255,255,.01);
+}
+.items-table td{padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text-dim);}
+.items-table tr.row-activity:last-child td{border-bottom:none;}
+.items-table col-toggle,
+.col-toggle{width:24px;padding-right:0 !important;}
+.col-cant{width:110px;}
+.col-rm{width:32px;}
+.row-toggle{
+  background:rgba(26,166,183,.14);color:var(--accent);border:1px solid rgba(26,166,183,.35);
+  border-radius:5px;width:22px;height:22px;line-height:1;cursor:pointer;font-size:11px;
+  display:inline-flex;align-items:center;justify-content:center;font-family:inherit;
+}
+.row-toggle:hover{background:rgba(26,166,183,.26);}
+.qty-inline-input{
+  width:90px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:6px 2px;font-size:12px;font-family:inherit;
+}
+.qty-inline-input:hover{border-bottom-color:var(--border);}
+.qty-inline-input:focus{outline:none;border-bottom-color:var(--accent);}
+tr.row-material{background:rgba(255,255,255,.015);}
+tr.row-material td{border-bottom:1px solid var(--border);padding-top:5px;padding-bottom:5px;}
+tr.row-material:last-child td{border-bottom:none;}
+.mat-branch{color:var(--text-mute);margin-right:2px;}
+.code-mat{color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11.5px;}
+.qty-pill{
+  display:inline-block;background:rgba(26,166,183,.14);color:var(--accent);
+  border:1px solid rgba(26,166,183,.35);
+  border-radius:6px;padding:2px 8px;font-weight:700;font-size:12px;
+}
+.mini-tag{font-size:11px;color:var(--text-mute);}
+.remove-x{background:none;border:none;color:var(--accent3);cursor:pointer;font-size:15px;padding:2px 6px;}
+.grupo-inline-input,.armado-inline-input{
+  width:100%;min-width:110px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:5px 2px;font-size:12px;font-family:inherit;
+}
+.grupo-inline-input:hover,.armado-inline-input:hover{border-bottom-color:var(--border);}
+.grupo-inline-input:focus,.armado-inline-input:focus{outline:none;border-bottom-color:var(--accent);}
+.col-grupo{min-width:150px;}
+.col-armado{min-width:120px;}
+.disp-badge{display:block;margin-top:3px;font-size:10px;color:var(--text-mute);white-space:nowrap;}
+.disp-badge.disp-neg{color:#ff8da0;font-weight:700;}
+.remove-x:hover{color:var(--accent2);}
+
+.add-item-row{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;
+  background:var(--panel-hi);border:1px dashed var(--border-hi);border-radius:8px;padding:10px;
+}
+.add-item-row .field{display:flex;flex-direction:column;gap:3px;flex:1;min-width:220px;}
+.add-item-row .field.qty{min-width:90px;flex:0 0 100px;}
+.add-item-row label{font-size:10px;color:var(--text-mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.add-item-row input{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 9px;font-size:13px;font-family:inherit;}
+.add-item-row input:focus{outline:none;border-color:var(--accent);}
+
+.fields-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+.fields-grid .field{display:flex;flex-direction:column;gap:3px;}
+.fields-grid label{font-size:10px;color:var(--text-mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.fields-grid input{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);border-radius:0;padding:8px 2px;font-size:13px;font-family:inherit;}
+.fields-grid input:hover{border-bottom-color:var(--border);}
+.fields-grid input:focus{outline:none;border-bottom-color:var(--accent);}
+.fields-grid .field-readonly label{color:var(--accent);}
+.fields-grid input.computed-total{
+  background:rgba(26,166,183,.10);border-color:rgba(26,166,183,.4);color:var(--accent);font-weight:700;
+  font-family:'JetBrains Mono','Menlo',monospace;cursor:default;
+}
+.fields-grid input:disabled{
+  opacity:.4;cursor:not-allowed;background:var(--panel);
+}
+.fields-grid .field-disabled label{color:var(--text-mute);}
+.add-servicio-row select{
+  width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:8px 9px;font-size:13px;font-family:inherit;
+}
+.add-servicio-row select:focus{outline:none;border-color:var(--accent);}
+.add-servicio-row{margin-bottom:14px;}
+
+.empty-state{
+  text-align:center;padding:40px 20px;color:var(--text-dim);
+  border:1px dashed var(--border-hi);border-radius:var(--radius);background:var(--panel);
+}
+.summary-box{
+  background:linear-gradient(180deg, var(--panel) 0%, var(--bg) 160%);border:1px solid var(--border);border-top:2px solid var(--accent2);border-radius:var(--radius);
+  padding:14px;margin-top:22px;box-shadow:0 4px 24px rgba(0,0,0,.25);
+}
+.summary-box h3{margin:0 0 10px;font-size:13px;color:var(--text);text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+.summary-table{width:100%;border-collapse:collapse;font-size:12px;}
+.summary-table th{text-align:left;color:var(--text-mute);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;padding:8px 8px;border-bottom:1px solid var(--border);}
+.summary-table td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text-dim);}
+.note{
+  background:rgba(245,106,121,.08);border:1px solid rgba(245,106,121,.3);color:var(--accent3);
+  border-radius:8px;padding:9px 12px;font-size:12px;margin-top:12px;
+}
+footer{
+  text-align:center;font-size:11px;color:var(--text-mute);padding:20px;
+}
+
+/* --- Presupuesto (ODM) tab --- */
+.upload-box{
+  border:2px dashed var(--accent);
+  border-radius:var(--radius);
+  background:rgba(26,166,183,.08);
+  padding:26px 18px;
+  text-align:center;
+  margin-bottom:16px;
+  transition:background .15s;
+}
+.upload-box p{margin:4px 0;color:var(--text);font-size:13px;}
+.upload-box .hint{color:var(--text-dim);font-size:12px;}
+.upload-box input[type=file]{display:none;}
+.header-chips{
+  display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;
+}
+.chip{
+  background:rgba(26,166,183,.08);border:1px solid rgba(26,166,183,.3);border-radius:20px;
+  padding:6px 12px;font-size:11.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;
+}
+.chip b{color:var(--text);font-weight:700;}
+.budget-section{margin-bottom:26px;}
+.budget-section h3{
+  font-size:13px;color:var(--text);margin:0 0 4px;
+  display:flex;align-items:center;gap:8px;
+  text-transform:uppercase;letter-spacing:.06em;font-weight:700;
+}
+.pill-count{
+  background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;
+  border-radius:20px;padding:1px 9px;
+}
+table.budget-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+table.budget-table th{
+  text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-mute);font-weight:600;padding:8px 9px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.01);
+}
+table.budget-table td{padding:8px 9px;border-bottom:1px solid var(--border);color:var(--text-dim);}
+table.budget-table tr:last-child td{border-bottom:none;}
+table.budget-table input[type=number]{
+  width:80px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);border-radius:0;padding:5px 2px;font-size:12px;font-family:inherit;
+}
+table.budget-table input[type=number]:hover{border-bottom-color:var(--border);}
+table.budget-table input[type=number]:focus{outline:none;border-bottom-color:var(--accent);}
+table.budget-table tfoot td{font-weight:700;background:var(--panel-hi);border-top:2px solid var(--border);color:var(--text);}
+.saldo-neg{color:var(--accent2);font-weight:700;}
+.saldo-ok{color:var(--ok);font-weight:700;}
+.code-mat{color:var(--accent);font-weight:700;}
+.code-serv{color:var(--accent3);font-weight:700;}
+.grand-total{
+  display:flex;justify-content:flex-end;gap:20px;flex-wrap:wrap;
+  background:var(--panel-hi);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);
+  padding:14px 18px;margin-top:6px;font-size:12.5px;
+}
+.grand-total b{font-size:16px;color:var(--accent2);}
+
+/* --- Cuadre Materiales tab --- */
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:16px;}
+.upload-box.compact{padding:16px 14px;margin-bottom:0;text-align:left;}
+.upload-box.compact .upload-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.upload-box.compact p{font-size:12.5px;}
+.upload-box.compact .btn{margin-top:2px;margin-right:6px;}
+.upload-box .file-ok{color:var(--ok);font-weight:700;}
+.upload-box .file-empty{color:var(--text-mute);}
+.tag-optional{font-size:9.5px;color:var(--text-mute);border:1px solid var(--border-hi);border-radius:20px;padding:1px 8px;text-transform:uppercase;letter-spacing:.05em;}
+.guia-badges{display:flex;flex-wrap:wrap;gap:4px;}
+.guia-badge{
+  display:inline-block;background:rgba(255,65,77,.10);color:var(--accent3);
+  border:1px solid rgba(255,65,77,.3);border-radius:5px;padding:1px 6px;font-size:10.5px;
+  font-family:'JetBrains Mono',monospace;white-space:nowrap;
+}
+.guia-badge.salida{background:rgba(26,166,183,.10);color:var(--accent);border-color:rgba(26,166,183,.3);}
+.row-extra td{background:rgba(255,65,77,.14);}
+.row-extra .code-mat{color:var(--accent3);}
+
+/* --- Matriz de ejecución por columnas (frentes) --- */
+.cuadre-scroll{width:100%;overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel);}
+table.matrix-table{width:auto;min-width:100%;border-collapse:collapse;font-size:11px;}
+table.matrix-table th, table.matrix-table td{white-space:nowrap;padding:7px 8px;border-bottom:1px solid var(--border);}
+table.matrix-table thead th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);font-weight:600;background:var(--panel-hi);border-bottom:1px solid var(--border);}
+table.matrix-table tbody td{color:var(--text-dim);}
+table.matrix-table tr:last-child td{border-bottom:none;}
+table.matrix-table tfoot td{font-weight:700;background:var(--panel-hi);border-top:2px solid var(--border);color:var(--text);}
+.sticky-l1, .sticky-l2, .sticky-r1, .sticky-r2{position:sticky;z-index:2;}
+.sticky-l1{left:0;width:84px;min-width:84px;max-width:84px;}
+.sticky-l2{left:84px;width:260px;min-width:260px;max-width:260px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 6px rgba(0,0,0,.28);}
+.sticky-r2{right:96px;width:96px;min-width:96px;box-shadow:-2px 0 6px rgba(0,0,0,.28);}
+.sticky-r1{right:0;width:112px;min-width:112px;}
+thead .sticky-l1, thead .sticky-l2, thead .sticky-r1, thead .sticky-r2{z-index:3;background:var(--panel-hi);}
+tfoot .sticky-l1, tfoot .sticky-l2, tfoot .sticky-r1, tfoot .sticky-r2{z-index:3;background:var(--panel-hi);}
+.exec-col-th{min-width:130px;}
+.exec-col-head{display:flex;flex-direction:column;gap:5px;align-items:stretch;}
+.exec-col-head .exec-col-name-row{display:flex;align-items:center;gap:4px;}
+.exec-col-name{
+  flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:5px 2px;font-size:10.5px;font-family:inherit;text-transform:none;letter-spacing:normal;font-weight:600;
+}
+.exec-col-name:hover{border-bottom-color:var(--border);}
+.exec-col-name:focus{outline:none;border-bottom-color:var(--accent);}
+.exec-col-remove{background:none;border:none;color:var(--accent3);cursor:pointer;font-size:14px;padding:0 3px;flex:0 0 auto;line-height:1;}
+.exec-col-remove:hover{color:var(--accent2);}
+.exec-qty-input{
+  width:90px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:5px 2px;font-size:11px;font-family:inherit;text-align:right;
+}
+.exec-qty-input:hover{border-bottom-color:var(--border);}
+.exec-qty-input:focus{outline:none;border-bottom-color:var(--accent);}
+.add-col-cell{min-width:110px;}
+.btn-add-col{width:100%;}
+.cant-actual-neg{background:rgba(255,65,77,.22);color:#ff8da0;font-weight:700;border-radius:5px;}
+.cant-actual-ok{color:var(--ok);font-weight:700;}
+.auto-col-name{display:flex;flex-direction:column;gap:2px;}
+.auto-col-name b{font-size:10.5px;color:var(--accent);letter-spacing:.02em;}
+.auto-col-name span{font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.05em;}
+td.auto-col-td{color:var(--text-dim);font-weight:400;}
+.obs-cell{display:flex;flex-direction:row;align-items:center;gap:6px;min-width:150px;}
+.obs-input{
+  width:100%;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);
+  border-radius:0;padding:2px 0;font-size:11px;font-family:inherit;
+}
+.obs-input:hover{border-bottom-color:var(--border);}
+.obs-input:focus{outline:none;border-bottom-color:var(--accent);}
+.obs-adicional-wrap{display:flex;align-items:center;gap:6px;}
+.obs-adicional{
+  display:inline-block;background:rgba(47,209,143,.14);color:var(--ok);
+  border:1px solid rgba(47,209,143,.4);border-radius:5px;padding:1px 7px;font-size:10.5px;
+  font-family:'JetBrains Mono',monospace;white-space:nowrap;font-weight:700;letter-spacing:.03em;
+}
+.add-material-row{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;
+  background:var(--panel-hi);border:1px dashed var(--border-hi);border-radius:8px;padding:12px;margin-top:12px;
+}
+.add-material-row .field{display:flex;flex-direction:column;gap:3px;}
+.add-material-row .field.f-codigo{flex:0 0 130px;}
+.add-material-row .field.f-desc{flex:1 1 220px;min-width:180px;}
+.add-material-row .field.f-unidad{flex:0 0 100px;}
+.add-material-row .field.f-precio{flex:0 0 120px;}
+.add-material-row label{font-size:10px;color:var(--text-mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.add-material-row input{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 9px;font-size:13px;font-family:inherit;}
+.add-material-row input:focus{outline:none;border-color:var(--accent);}
+
+/* --- Vía número editable (MT Subterránea) --- */
+.via-num-input{width:64px !important;min-width:64px !important;flex:0 0 64px !important;text-align:center;font-weight:700;}
+
+/* --- Asociar Materiales tab --- */
+.sheet-select-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.sheet-select-btn{
+  border:1px solid var(--border-hi);background:var(--panel);color:var(--text-dim);
+  border-radius:8px;padding:9px 16px;font-size:12.5px;font-weight:700;letter-spacing:.03em;
+  cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .15s;
+}
+.sheet-select-btn:hover{color:var(--text);border-color:var(--accent);}
+.sheet-select-btn.active{background:rgba(26,166,183,.16);color:var(--accent);border-color:var(--accent);box-shadow:0 0 14px rgba(26,166,183,.12);}
+table.assoc-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+table.assoc-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-mute);font-weight:600;padding:8px 9px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.01);}
+table.assoc-table td{padding:8px 9px;border-bottom:1px solid var(--border);color:var(--text-dim);vertical-align:middle;}
+table.assoc-table tr:last-child td{border-bottom:none;}
+.assoc-current{
+  display:inline-flex;align-items:center;gap:6px;background:rgba(47,209,143,.12);color:var(--ok);
+  border:1px solid rgba(47,209,143,.35);border-radius:6px;padding:3px 9px;font-size:11px;font-family:'JetBrains Mono',monospace;
+}
+.assoc-none{color:var(--text-mute);font-size:11px;font-style:italic;}
+.assoc-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.assoc-controls select{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;
+  padding:6px 8px;font-size:12px;font-family:inherit;min-width:220px;max-width:320px;
+}
+.assoc-controls select:focus{outline:none;border-color:var(--accent);}
+.assoc-hint{
+  margin-top:6px;font-size:11px;color:var(--ok);background:rgba(47,209,143,.08);
+  border:1px solid rgba(47,209,143,.3);border-radius:6px;padding:4px 8px;display:none;
+}
+.assoc-hint.show{display:block;}
+
+.fields-grid-resane{grid-template-columns: 1.3fr 1.1fr 78px 78px 78px 92px 1fr;}
+.fields-grid-resane .field-plano,
+.fields-grid-resane .field-ejecutor{min-width:0;}
+.fields-grid-resane .field-largo input,
+.fields-grid-resane .field-ancho input,
+.fields-grid-resane .field-espesor input,
+.fields-grid-resane .field-descontar input{padding-left:6px;padding-right:6px;}
+
+@media (max-width:640px){
+  header{padding:16px;}
+  main{padding:14px 10px 60px;}
+  .fields-grid-resane{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}
+}
+</style>
+</head>
+<body>
+
+<!--
+  Pantalla de licencia: se muestra ANTES que cualquier otra cosa. La app real
+  (header, tabs, main) queda oculta hasta que el servidor confirma que la
+  licencia es válida. No es una pantalla decorativa: mientras está visible,
+  ninguna función de negocio se ejecuta (ver initApp() al final del script).
+-->
+<div id="license-gate" style="position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:var(--bg);">
+  <div style="width:100%;max-width:360px;padding:28px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,.4);">
+    <h2 style="margin:0 0 4px;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--text);">Cobra Perú</h2>
+    <p style="margin:0 0 16px;font-size:12px;color:var(--text-dim);">Ingresa tu clave de licencia para continuar.</p>
+    <input id="license-input" type="text" placeholder="XXXX-XXXX-XXXX"
+      style="width:100%;box-sizing:border-box;background:#ffffff0d;border:1px solid var(--border-hi);border-radius:8px;padding:10px;color:var(--text);font-family:inherit;font-size:13px;margin-bottom:10px;">
+    <button id="license-submit" class="btn btn-primary" style="width:100%;justify-content:center;">Validar y continuar</button>
+    <div id="license-msg" style="margin-top:10px;font-size:12px;min-height:16px;"></div>
+  </div>
+</div>
+
+<header>
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 40 40" fill="none">
+      <circle cx="20" cy="20" r="19" stroke="var(--accent)" stroke-width="2" opacity=".6"/>
+      <path d="M20 8 L28 20 L20 32 L12 20 Z" fill="var(--text)" opacity=".9"/>
+      <circle cx="20" cy="20" r="4" fill="var(--accent2)"/>
+    </svg>
+    <div>
+      <h1>Ingreso de Liquidaciones · Redes MT/BT/AP</h1>
+      <p>COBRA PERÚ S.A. — versión simplificada por vía y actividad (reemplaza la matriz de columnas)</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-ghost btn-small" onclick="resetAll()">🗑 Borrar todo</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main id="main"></main>
+
+<footer>Los datos se guardan automáticamente en este navegador. Exporta a CSV para pegarlos en el Excel original o enviarlos.</footer>
+
+<script>
+/* ============ CATÁLOGO EXTRAÍDO DE formato_liq.xlsx ============ */
+const CATALOG = {"d1":[{"col":"B","grupo":"Zanja < 1.5m","code":2100811,"desc":"Mtbtap-Apert. Cierre Zan. Prof>1M<=1.5M","variant":null},{"col":"D","grupo":"Zanja > 1.5m","code":2100810,"desc":"Mtbtap-Apert. Cierre Zan. Prof. >1.5Mt","variant":null},{"col":"E","grupo":"Calicata Sondeo","code":2100468,"desc":"Mtbtap-Excav. Mov Tierra Calicata Apique","variant":null},{"col":"F","grupo":"Protecc. Tubos","code":2100934,"desc":"Mtbt-Inst Tuberia Hdpe Tierra/Conc 6-8\"","variant":null},{"col":"G","grupo":"Sellado Tapas","code":2100794,"desc":"Mtbt-Sellado Ductos Cam. Camar. Ducto","variant":null},{"col":"H","grupo":"Prueba Compact.","code":2100851,"desc":"Alp-Prueba O Ensayo De Compactacion","variant":null},{"col":"I","grupo":"Instalación Cable Comunicación","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 150Mm2. (1100127)"},{"col":"J","grupo":"Instalación Cable Comunicación","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 240Mm2. (1100128)"},{"col":"K","grupo":"Instalación Cable Comunicación","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"L","grupo":"Instalación Cable Comunicación","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"M","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Cruceta Mad. 4X 4X 1.64' 10Kv. (1100342)"},{"col":"N","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Cruceta Mad. 4X 5X 5' 10Kv. (1100344)"},{"col":"O","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Terminacion 1P.Al/Cu 120Mm2 Ext.840Mm.Mt (1100948)"},{"col":"P","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Mv Underg.Cab Are4H5Po 1X150Mm2 12/20(24 (1100103)"},{"col":"Q","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X240Mm2 (1100094)"},{"col":"R","grupo":"Subidas - Bajada MT.","code":2100617,"desc":"Mtbt-Paso Aereo Subt. Mt","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X400Mm2 (1100095)"},{"col":"S","grupo":"Instalación de Cables MT Hasta 300 mm2","code":2100763,"desc":"Mtbt-Inst 3F Cable 1P<=300 Mm2 Mt Tierra","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X120Mm2 (1100093)"},{"col":"T","grupo":"Instalación de Cables MT Hasta 300 mm2","code":2100763,"desc":"Mtbt-Inst 3F Cable 1P<=300 Mm2 Mt Tierra","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X120Mm2 (1100093)"},{"col":"U","grupo":"Instalación de Cables MT Hasta 300 mm2","code":2100485,"desc":"Mtbt-Inst. 3F Cable 1P <=120 Mt Ducto","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X 70Mm2 (1100092)"},{"col":"V","grupo":"Instalación de Cables MT Hasta 300 mm2","code":2100485,"desc":"Mtbt-Inst. 3F Cable 1P <=120 Mt Ducto","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X120Mm2 (1100093)"},{"col":"W","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100804,"desc":"Mtbt-Inst. 3F Cble 1P> 120Mm2 Tierra Mt","variant":"Mv Underg.Cab Are4H5Po 1X150Mm2 12/20(24 (1100103)"},{"col":"X","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100804,"desc":"Mtbt-Inst. 3F Cble 1P> 120Mm2 Tierra Mt","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X240Mm2 (1100094)"},{"col":"Y","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100804,"desc":"Mtbt-Inst. 3F Cble 1P> 120Mm2 Tierra Mt","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X400Mm2 (1100095)"},{"col":"Z","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100486,"desc":"Mtbt-Inst. 3F Cable 1P>120<=300 Mt Ducto","variant":"Mv Underg.Cab Are4H5Po 1X150Mm2 12/20(24 (1100103)"},{"col":"AA","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100486,"desc":"Mtbt-Inst. 3F Cable 1P>120<=300 Mt Ducto","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X240Mm2 (1100094)"},{"col":"AB","grupo":"Instalación de Cables MT Mayor 120 mm2","code":2100486,"desc":"Mtbt-Inst. 3F Cable 1P>120<=300 Mt Ducto","variant":"Cable Al.Aisl.Red.Na2Xsa2Y 20Kv.1X400Mm2 (1100095)"},{"col":"AC","grupo":"Prueba Cable","code":2100503,"desc":"Pruebas De Cables Mt O Bt (Según Corresponda)","variant":null},{"col":"AD","grupo":"Emplame MT trifáasico","code":2100511,"desc":"Mtbt-Real Mufa Recta Cables Mt 1P 3F","variant":"Empal.Unip.Retractil24Kv Al/Cu240-400Mm2 (1100972)"},{"col":"AE","grupo":"Emplame MT trifáasico","code":2100511,"desc":"Mtbt-Real Mufa Recta Cables Mt 1P 3F","variant":"Empal.Unip.Retractil24Kv Al/Cu95-240Mm2 (1100971)"},{"col":"AF","grupo":"Emplame MT trifáasico","code":2100511,"desc":"Mtbt-Real Mufa Recta Cables Mt 1P 3F","variant":"Empal.3P Mixto 35-70Cu/120-150Almm2 10Kv (1100370)"},{"col":"AG","grupo":"Terminal en Cable MT","code":2100712,"desc":"Mtbt-Realterm. Int/Ext Tipo T Codo Mt 1F","variant":"Terminacion 1P.Al/Cu 120Mm2 Int.420Mm.Mt (1100944)"},{"col":"AH","grupo":"Terminal en Cable MT","code":2100712,"desc":"Mtbt-Realterm. Int/Ext Tipo T Codo Mt 1F","variant":"Conect.120Mm2 Na2Xsa2Y. C/Mod-Comp/L P-A (1100937)"},{"col":"AI","grupo":"Terminal en Cable MT","code":2100712,"desc":"Mtbt-Realterm. Int/Ext Tipo T Codo Mt 1F","variant":"Conect.240Mm2 Na2Xsa2Y. C/Mod-Comp/L P-A (1100938)"},{"col":"AJ","grupo":"Terminal en Cable MT","code":2100712,"desc":"Mtbt-Realterm. Int/Ext Tipo T Codo Mt 1F","variant":"Conect.400Mm2 Na2Xsa2Y. C/Mod-Comp/L P-A (1100939)"},{"col":"AK","grupo":"Terminal en Cable MT","code":2100712,"desc":"Mtbt-Realterm. Int/Ext Tipo T Codo Mt 1F","variant":"Conecrect70Mm2 Na2Xsa2Y.P/C.Mod-Comp/P-F (1100936)"},{"col":"AL","grupo":"Telecontrol","code":"CCO161","desc":"Instalación/Retiro De Accesorios De Telemedida Y Configuración","variant":"Up Telecontrol Equipada - Interior (1100481)"},{"col":"AM","grupo":"Telecontrol","code":"CCO161","desc":"Instalación/Retiro De Accesorios De Telemedida Y Configuración","variant":"Tablero Aux Instal Pared C.Transf Aislam (1100484)"},{"col":"AN","grupo":"Telecontrol","code":"CCO161","desc":"Instalación/Retiro De Accesorios De Telemedida Y Configuración","variant":"Rele Protec Direcc Indicador Falla Subte (1100702)"},{"col":"AO","grupo":"Telecontrol","code":"CCO161","desc":"Instalación/Retiro De Accesorios De Telemedida Y Configuración","variant":"Batería Sellada Pb-Acido Vrla 12Vcc 24Ah (1100478)"}],"d2":[{"col":"E","grupo":"Retiro Poste","code":2100598,"desc":"Mtbtap-Retiro De Poste De Mt","variant":null},{"col":"F","grupo":"Instalacion Poste MT","code":2100327,"desc":"Mtbtap-Instalacion De Poste Mt Concreto","variant":"Poste Ca.13/400/2.5/180/375 La.Mt/Bt/Ap (1100325)"},{"col":"G","grupo":"Instalacion Poste MT","code":2100327,"desc":"Mtbtap-Instalacion De Poste Mt Concreto","variant":"Poste Ca.15/400/2.5/210/435 La.Mt/Bt/Ap (1100326)"},{"col":"H","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Plataforma Sop.Ca.400-630Kva.350Mmdx1150 (1100338)"},{"col":"I","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Palomilla Doble Ca.400-630Kva.290Mmx2300 (1100333)"},{"col":"J","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Cruceta Mad. 4X 4X 1.64' 10Kv. (1100342)"},{"col":"K","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Cruceta Mad. 4X 5X 5' 10Kv. (1100344)"},{"col":"L","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Cruceta Mad. 4X 4X 4' 10Kv. (1100343)"},{"col":"M","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Fusible Secc(Cut-Out)20Kv.100A (1100707)"},{"col":"N","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Fusible Expuls.25Kv. 15A.Cab.Remov.P.Fu (1100677)"},{"col":"O","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Secc.Unip.Bt.630A.P.Fus.Nh-Intemperie (1100697)"},{"col":"P","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Fusible L.C. Nh T-2 220V.250A. (1100437)"},{"col":"Q","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Conector Terminal 120/150 M12 (1100883)"},{"col":"R","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 240Mm2. (1100128)"},{"col":"S","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Conector Terminal 240 M12 (1100884)"},{"col":"T","grupo":"Instalación de Estructuras Biposte \"SAB\"","code":2100668,"desc":"Mtbtap-Inst Est Aparellaje Transf 2Poste","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"U","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Tab.Ap.Polim.Sab/Sam/Scb/Scp-Equipado (1100704)"},{"col":"V","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Control Fotoelectrico 220V.1000W-1800Va. (1100242)"},{"col":"W","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Receptaculo C/Soporte P.Control Fotoelec (1100241)"},{"col":"X","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Fusible L.C. Nh T-00 220V. 80A. (1100427)"},{"col":"Y","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Conector Perf. 16-95Al/4-16Cu.Mm2 (1100840)"},{"col":"Z","grupo":"Instalación de Modulo AP","code":2100569,"desc":"Mtbt-Inst. Caja Polim Ap Y Eq Sam Sab","variant":"Conector Perf. 16-95Al/4-16Cu.Mm2 (1100840)"},{"col":"AA","grupo":"Instalación De Medidor Polifásico (Bifásico O Trifásico)","code":2100839,"desc":"Alp-Inst. Medidor Polifasico (2F 3F)","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X10Mm2. (1100123)"},{"col":"AB","grupo":"Instalación De Medidor Polifásico (Bifásico O Trifásico)","code":2100839,"desc":"Alp-Inst. Medidor Polifasico (2F 3F)","variant":"Conector Perf. 16-95 Al/1.5- 6Cu.Mm2 (1100839)"},{"col":"AC","grupo":"Instalación De Medidor Polifásico (Bifásico O Trifásico)","code":2100839,"desc":"Alp-Inst. Medidor Polifasico (2F 3F)","variant":"Caja Pol. Portam. Trif. 400X230X130Mm (1100383)"},{"col":"AD","grupo":"Instalación De Medidor Polifásico (Bifásico O Trifásico)","code":2100839,"desc":"Alp-Inst. Medidor Polifasico (2F 3F)","variant":"Med. Trif Energia 220V.10(100)A.3H.Cl.1 (1200021)"},{"col":"AE","grupo":"Instalación De Medidor Polifásico (Bifásico O Trifásico)","code":2100877,"desc":"Alp-Instalacion De Murete Bt","variant":null},{"col":"AF","grupo":"Instal. TRAFO","code":2100670,"desc":"Mtbtap-Inst. Transf Sobre 1+Postes","variant":"T/D 3F 100Kva 20Kv - Onan - Conv (1300066)"},{"col":"AG","grupo":"Inst. Pozo a Tierra PAT","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"Cable Puesta Tierra Copperweld 7X10 Awg (1100141)"},{"col":"AH","grupo":"Inst. Pozo a Tierra PAT","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"Boveda Ca.C/Tapa P.Electrodo Psta.Tierra (1100341)"},{"col":"AI","grupo":"Inst. Pozo a Tierra PAT","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"Electrodo Copperweld 5/8X2400Mml. Pt. (1100036)"},{"col":"AJ","grupo":"Instalación de Retenida MT.","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"String Ins 24Kv Cs 45 Ce 190/744-430 (1100042)"},{"col":"AK","grupo":"Instalación de Retenida MT.","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"Cable P.Viento A°G° (Cl-B) 3/8 7Hil. (1100129)"},{"col":"AL","grupo":"Instalación de Retenida MT.","code":2100698,"desc":"Mtbt-Malla De Puesta A Tierra","variant":"Zapata Ca.Tp.Cruz 700X700Mm.P.Anclaje (1100340)"},{"col":"AM","grupo":"Instalación armado Poste Ejecutado","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"Cruceta Mad. 4X 4X 1.64' 10Kv. (1100342)"},{"col":"AN","grupo":"Instalación armado Poste Ejecutado","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"Cruceta Mad. 4X 4X 4' 10Kv. (1100343)"},{"col":"AO","grupo":"Instalación armado Poste Ejecutado","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"Cruceta Mad. 4X 5X 5' 10Kv. (1100344)"},{"col":"AP","grupo":"Instalación armado Poste Ejecutado","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"Mensula Ca. M/1.00/250-245Mmd. (1100331)"},{"col":"AQ","grupo":"Instalación armado Poste Ejecutado","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"Mensula Ca. M/1.00/250-275Mmd. (1100332)"},{"col":"AR","grupo":"Prensado Conectores","code":2100867,"desc":"Alp-Instalacion De Terminal En Cables Mt","variant":"Conector Compr.Bim.H Aa.70/Cu.16-35Mm2 (1100843)"},{"col":"AS","grupo":"Prensado Conectores","code":2100867,"desc":"Alp-Instalacion De Terminal En Cables Mt","variant":"Conector Compr.Bim.H Aa.70/Cu.70Mm2. (1100844)"},{"col":"AT","grupo":"Prensado Conectores","code":2100867,"desc":"Alp-Instalacion De Terminal En Cables Mt","variant":"Conector Compr.G Cu.16-35/Cu.16-35Mm2. (1100841)"},{"col":"AU","grupo":"Inst. Cable Comuniccación.BT","code":2100356,"desc":"Mtbtap-Instalacion De Terminal Cables Bt","variant":"Conductor Desn.Aaac. 7H. 70Mm2-C/Grasa (1100043)"},{"col":"AV","grupo":"Inst. Cable Comuniccación.BT","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cabl.Auto.12/20Kv(Xlpe)3-1X95+P50Mm2 (1100105)"},{"col":"AW","grupo":"Instalación de red Aerea MT","code":2100346,"desc":"Mtbt-Inst. Red Conds. Desde 70 A 120Mm2","variant":"Conductor Desn.Aaac. 7H. 70Mm2-C/Grasa (1100043)"},{"col":"AX","grupo":"Instalación de red Aerea MT","code":2100346,"desc":"Mtbt-Inst. Red Conds. Desde 70 A 120Mm2","variant":"Conductor Desn.Aaac.19H.120Mm2-C/Grasa (1100044)"},{"col":"AY","grupo":"Instalación de red Aerea MT","code":2100765,"desc":"Mtbt-Inst. Red Trenzada Media Tension","variant":"Cabl.Auto.12/20Kv(Xlpe)3-1X95+P50Mm2 (1100105)"},{"col":"AZ","grupo":"Traslado Red Aera","code":2100352,"desc":"Mtbt-Templar/Tens Cond Cualq Tipo Dim","variant":null},{"col":"BA","grupo":"Ins. Aisladores","code":2100374,"desc":"Mt Bt - Instalación De Red Trenzada En Media Tensión","variant":"Line Post Ins 24 Kv Clp 13 190/744 (1100041)"},{"col":"BB","grupo":"Ins. Aisladores","code":2100374,"desc":"Mt Bt - Instalación De Red Trenzada En Media Tensión","variant":"String Ins 24Kv Cs 45 Ce 190/744-430 (1100042)"},{"col":"BC","grupo":"Llave SP","code":2100358,"desc":"Mtbt-Inst. Seccionador Aereo (Unipolar)","variant":"Secc.Unip.Bt.630A.P.Fus.Nh-Intemperie (1100697)"},{"col":"BD","grupo":"Llave SP","code":2100607,"desc":"Mtbtap-Inst. Repos. Conjunto Fusibles Bt","variant":"Fusible L.C. Nh T-3 220V.315A. (1100440)"},{"col":"BE","grupo":"Secc. Aereo MT.","code":2100358,"desc":"Mtbt-Inst. Seccionador Aereo (Unipolar)","variant":"Secc.Unip.Aereo 25Kv.600A.-Moderada (1100711)"},{"col":"BF","grupo":"Secc. Aereo MT.","code":2100607,"desc":"Mtbtap-Inst. Repos. Conjunto Fusibles Bt","variant":"Fusible L.C. Nh T-3 220V.315A. (1100440)"},{"col":"BG","grupo":"Pletina Trafo","code":2100547,"desc":"Mtbt-Ampliacion Pletinas Cu Mt (M-Terna)","variant":null},{"col":"BH","grupo":"Protec.","code":2100817,"desc":"Suministro En Instalación De Guardavías (Barreras De Contención) De 1,2 M De Altura, Galvanizados En Caliente.","variant":null}],"d4":[{"col":"D","grupo":"Zanja  hasta 1.0m","code":2100812,"desc":"Mtbtap-Apert. Cierre Zan. Prof. <=1M Bt","variant":null},{"col":"G","grupo":"Zanja  < 1.5m","code":2100811,"desc":"Mtbtap-Apert. Cierre Zan. Prof>1M<=1.5M","variant":null},{"col":"I","grupo":"Calicata Sondeo","code":2100468,"desc":"Mtbtap-Excav. Mov Tierra Calicata Apique","variant":null},{"col":"J","grupo":"Protec. Tubos","code":2100934,"desc":"Mtbt-Inst Tuberia Hdpe Tierra/Conc 6-8\"","variant":null},{"col":"S","grupo":"Sellado Taponeo","code":2100794,"desc":"Mtbt-Sellado Ductos Cam. Camar. Ducto","variant":null},{"col":"U","grupo":"Subidas Bajada AP.","code":2100572,"desc":"Mtbt-Camb. Inst. Cable Ap Subida Bajada","variant":"Conector Terminal 400 M16 (1100885)"},{"col":"V","grupo":"Subidas Bajada AP.","code":2100572,"desc":"Mtbt-Camb. Inst. Cable Ap Subida Bajada","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X10Mm2. (1100123)"},{"col":"W","grupo":"Subidas Bajada BT.","code":2100618,"desc":"Mtbt-Paso Aereo Subt. Bt","variant":"Conector Terminal 400 M16 (1100885)"},{"col":"X","grupo":"Subidas Bajada BT.","code":2100618,"desc":"Mtbt-Paso Aereo Subt. Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"Y","grupo":"Inst. Cable  Comuniccación","code":"2100761","desc":"LLAVE 04.","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"Z","grupo":"Inst. Cable  Comuniccación","code":2100358,"desc":"LLAVE 04.","variant":"Secc.Unip.Bt.630A.P.Fus.Nh-Intemperie (1100697)"},{"col":"AA","grupo":"Inst. Cable  Comuniccación","code":2100607,"desc":"LLAVE 04.","variant":"Fusible L.C. Nh T-3 220V.400A. (1100659)"},{"col":"AB","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X10Mm2. (1100123)"},{"col":"AC","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X25Mm2. (1100124)"},{"col":"AD","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1 Kv 1X 70Mm2. (1100126)"},{"col":"AE","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100495,"desc":"Mtbt-Inst. 3F Cable 1P <=120 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X10Mm2. (1100123)"},{"col":"AF","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100495,"desc":"Mtbt-Inst. 3F Cable 1P <=120 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X25Mm2. (1100124)"},{"col":"AG","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100495,"desc":"Mtbt-Inst. 3F Cable 1P <=120 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1 Kv 1X 70Mm2. (1100126)"},{"col":"AH","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 150Mm2. (1100127)"},{"col":"AI","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 240Mm2. (1100128)"},{"col":"AJ","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100805,"desc":"Mtbt-Inst. 3F Cble Mono >120Mm2 Direc Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"AK","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100496,"desc":"Mtbt-Inst. 3F Cable 1P>120Mm2 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 150Mm2. (1100127)"},{"col":"AL","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100496,"desc":"Mtbt-Inst. 3F Cable 1P>120Mm2 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 240Mm2. (1100128)"},{"col":"AM","grupo":"Instalación de Cables BT mayor 120 mm2","code":2100496,"desc":"Mtbt-Inst. 3F Cable 1P>120Mm2 Bt Ducto","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X400Mm2. (1100122)"},{"col":"AN","grupo":"Emplame BT trifáasico","code":2100507,"desc":"Mtbt-Real Mufa Recta Cables Bt 1P 3F-N","variant":"Empal Deriv.1P.2C.240-400/240-400Mmcu-Al (1100964)"},{"col":"AO","grupo":"Emplame BT trifáasico","code":2100507,"desc":"Mtbt-Real Mufa Recta Cables Bt 1P 3F-N","variant":"Empal Deriv 3P Mixt 240-300Cu/240-400Al (1100881)"},{"col":"AP","grupo":"Emplame BT trifáasico","code":2100509,"desc":"Mtbt-Realizar Mufa Der Cables Bt 1P 3F-N","variant":"Empal Deriv.1P.2C.240-400/240-400Mmcu-Al (1100964)"},{"col":"AQ","grupo":"Emplame BT trifáasico","code":2100509,"desc":"Mtbt-Realizar Mufa Der Cables Bt 1P 3F-N","variant":"Empal Deriv 3P Mixt 240-300Cu/240-400Al (1100881)"},{"col":"AR","grupo":"Traslado  Acometidas","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt  1P1F","variant":"1100908 (1Ø)"},{"col":"AS","grupo":"Traslado  Acometidas","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt  1P1F","variant":"1100908 (3Ø)"},{"col":"AT","grupo":"Punta Muerta","code":2100508,"desc":"Mtbt-Real Mufa Recta Simple Bt 1P 1F-N","variant":null},{"col":"AU","grupo":"Terminal en Cables BT","code":2100522,"desc":"Instalación De Un Terminal En Cables","variant":"Conector Terminal 120/150 M12 (1100883)"},{"col":"AV","grupo":"Terminal en Cables BT","code":2100522,"desc":"Instalación De Un Terminal En Cables","variant":"Conector Terminal 240 M12 (1100884)"},{"col":"AW","grupo":"Terminal en Cables BT","code":2100522,"desc":"Instalación De Un Terminal En Cables","variant":"Conector Terminal 400 M16 (1100885)"}],"d5":[{"col":"G","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X10Mm2. (1100123)"},{"col":"H","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X25Mm2. (1100124)"},{"col":"I","grupo":"Instalación de Cables BT Hasta 120 mm2","code":2100761,"desc":"Mtbt-Inst. 3F Cable 1P Cond. 4P <=120 Bt","variant":"Cable Al. Na2Xy 0.6/1Kv. 1X 35Mm2. (1100125)"},{"col":"J","grupo":"Terminal en Cables BT","code":2100522,"desc":"Mtbt-Instalacion De Terminal Cables Bt","variant":"Termin Bim Cabl A/Cu Unipol 1X6/1X10 Mm2 (1100952)"},{"col":"K","grupo":"Terminal en Cables BT","code":2100522,"desc":"Mtbt-Instalacion De Terminal Cables Bt","variant":"Conector Terminal Pin 16Mm2 Bt Unipolar (1100953)"},{"col":"L","grupo":"Traslado de Acometidas (1Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .240-400/10-35Mm2Cu-Al (1100910)"},{"col":"M","grupo":"Traslado de Acometidas (1Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .120-240/10-35Mm2Cu-Al (1100908)"},{"col":"N","grupo":"Traslado de Acometidas (1Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .120-240/10-35Mm2Cu-Al (1100908)"},{"col":"O","grupo":"Traslado de Acometidas (1Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Recto 1P 10-25/10-25Mm2 Cu-Al (1100524)"},{"col":"P","grupo":"Traslado de Acometidas (3Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .240-400/10-35Mm2Cu-Al (1100910)"},{"col":"Q","grupo":"Traslado de Acometidas (3Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .120-240/10-35Mm2Cu-Al (1100908)"},{"col":"R","grupo":"Traslado de Acometidas (3Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .120-240/10-35Mm2Cu-Al (1100908)"},{"col":"S","grupo":"Traslado de Acometidas (3Ø)","code":2100510,"desc":"Mtbt-Realizar Mufa Der Simple Bt 1P1F","variant":"Empal Deriva 1P .120-240/10-35Mm2Cu-Al (1100908)"}],"d6":[{"col":"E","grupo":"Retiro - Instalación de Poste BT","code":2100599,"desc":"Mtbt-Retiro De Poste De Bt","variant":null},{"col":"F","grupo":"Instalación de Poste BT","code":2100802,"desc":"Mtbt-Instalacion De Poste De Bt Concreto","variant":"Poste Ca. 8/200/2/150/270 Ap.-Labt (1100316)"},{"col":"G","grupo":"Retiro - Instalación de Poste BT","code":2100802,"desc":"Mtbt-Instalacion De Poste De Bt Concreto","variant":"Poste Ca. 9/200/2/150/285 Ap.-Labt (1100317)"},{"col":"H","grupo":"Retiro - Instalación de Poste BT","code":2100802,"desc":"Mtbt-Instalacion De Poste De Bt Concreto","variant":"Poste Fibra Vidrio De 8/200/150/270 (1100304)"},{"col":"I","grupo":"Retiro - Instalación de Poste BT","code":2100802,"desc":"Mtbt-Instalacion De Poste De Bt Concreto","variant":"Poste Ca. 9/200/2/150/285 Ap.-Labt (1100317)"},{"col":"J","grupo":"Armazon Secunadria Poste BT.","code":2100336,"desc":"Mtbtap-Inst Armaz. Secundaria Simpl-Dobl","variant":null},{"col":"K","grupo":"Armazon Secunadria Poste BT.","code":2100339,"desc":"Mtbt-Ret. Armaz. Secundaria (Simple","variant":null},{"col":"L","grupo":"Inst. de Retenida BT.","code":2100340,"desc":"Mtbtap-Instalacion Tirante Btvientoancla","variant":"Aislador Tensor Porcelana Cl.54-1 Bt (1100995)"},{"col":"M","grupo":"Inst. de Retenida BT.","code":2100340,"desc":"Mtbtap-Instalacion Tirante Btvientoancla","variant":"Cable P.Viento A°G°(Cl-B) 5/16 7Hil. (1100130)"},{"col":"N","grupo":"Inst. de Retenida BT.","code":2100340,"desc":"Mtbtap-Instalacion Tirante Btvientoancla","variant":"Zapata Ca.Tp.Cuadrada 400X400Mm.P.Anclaj (1100339)"},{"col":"O","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Retiro de Pastoral"},{"col":"P","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Retiro de Lamapa"},{"col":"Q","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Retiro de Luminaria"},{"col":"R","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Traslado de Pastoral"},{"col":"S","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Traslado de Luminaria"},{"col":"T","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Pastoral Ag° Ps/0.3/0.6-1.5C/Abrz.162Mm (1100305)"},{"col":"U","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Pastoral Ag° Ps/1.5/1.9-1.5C/Abrz.162Mm (1100457)"},{"col":"V","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Pastoral Ag° Ps/1.5/3.0-1.5C/Abrz.162Mm (1100458)"},{"col":"W","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Pastoral Ag° Ps/3.2/3.4-1.5C/Abrz.162Mm (1100459)"},{"col":"X","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Lampara Sodio 220V.150W.E-40 Tub.A.Pres. (1100143)"},{"col":"Y","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Lampara Sodio 220V.250W.E-40 Tub.A.Pres. (1100144)"},{"col":"Z","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"-"},{"col":"AA","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"-"},{"col":"AB","grupo":"Retiro - Instalación Pastoral, Luminarias","code":2100564,"desc":"Mtbt-Instalacion O Cambio De Pastoral","variant":"Conector Perf. 16-95 Al/1.5- 6Cu.Mm2 (1100839)"},{"col":"AC","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Cable Autosop.Al.220V. 2X16+P25- 0.22Kv (1100047)"},{"col":"AD","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Cable Autosop.Al.220V. 3X 35+P (1100046)"},{"col":"AE","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Cable Autosop.Al.220V. 3X 35+2X16+P (1100048)"},{"col":"AF","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Cable Autosop.Al. 220V.3X95+1X50Mm2. (1100088)"},{"col":"AG","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Cable Autosop.Al 220V.3X95+2X16+1X50Mm2 (1100089)"},{"col":"AH","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Grapa Suspens 25-54,6Mm2.Cableautosopbt (1100284)"},{"col":"AI","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Grapaanclaje 50-54,6Mm2.P.Cableautosopbt (1100286)"},{"col":"AJ","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Conector Perf. 25-95Al/25-95Al/Cu.Mm2 (1100864)"},{"col":"AK","grupo":"Instalación de Red Aerea BT.","code":2100806,"desc":"Instalacion De Red Trenzada Baja Tension","variant":"Conector Perf. 16-95Al/4-16Cu.Mm2 (1100840)"},{"col":"AL","grupo":"Terminales en Cable","code":2100355,"desc":"Mtbt-Inst Sust. Ret. Union, Der, Emp Bt","variant":"Conector Perf. 25-95Al/25-95Al/Cu.Mm2 (1100864)"},{"col":"AM","grupo":"Terminales en Cable","code":2100355,"desc":"Mtbt-Inst Sust. Ret. Union, Der, Emp Bt","variant":"Conector Perf. 16-95Al/4-16Cu.Mm2 (1100840)"},{"col":"AN","grupo":"Traslado - Retiro Red Aerea BT.","code":2100352,"desc":"Mtbt-Templar/Tens Cond Cualq Tipo Dim","variant":null},{"col":"AO","grupo":"Traslado - Retiro Red Aerea BT.","code":2100791,"desc":"Mtbtap-Ret. Cond Aereo Bt Desn Trenz","variant":null},{"col":"AP","grupo":"Punta  Muerta","code":2100508,"desc":"Mtbt-Real Mufa Recta Simple Bt 1P 1F-N","variant":null},{"col":"AU","grupo":"Instalación de Cruceta Madera DMS","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"1100342 (DMS)"},{"col":"AV","grupo":"Instalación de Cruceta Madera DMS","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"1100343"},{"col":"AW","grupo":"Instalación de Cruceta Madera DMS","code":2100334,"desc":"Mtbt-Inst. Cruc. Simpl-Dobl Cond. Desn","variant":"1100344"}]}
+;
+
+const SHEETS = [
+  {
+    key:'d1', label:'MT Subterránea', title:'Detalle de trabajos en redes subterráneas MT',
+    kind:'activities',
+    desc:'Cada "vía" es una fila del cuadro original. Agrega las actividades realizadas en esa vía en vez de buscarlas entre 40 columnas.',
+    startCell:'A20', extraFields:[{key:'plano',label:'N° de Plano'},{key:'ejecutora',label:'Ejecutora'}]
+  },
+  {
+    key:'d2', label:'Redes Aéreas MT', title:'Detalle de trabajos en redes aereas MT',
+    kind:'activities',
+    desc:'Para trabajos aéreos de media tensión (postes, estructuras biposte "SAB", módulos AP, medidores, transformadores, retenidas, red aérea MT, etc). Cada vía puede ser un poste o tramo.',
+    startCell:'A19', extraFields:[{key:'armado',label:'Tipo de Armado'},{key:'plano',label:'N° de Plano'},{key:'ejecutora',label:'Ejecutora'}]
+  },
+  {
+    key:'d4', label:'BT Subterránea', title:'Detalle de trabajos en redes subterráneas BT',
+    kind:'activities',
+    desc:'Igual que MT, pero para trabajos de baja tensión subterránea.',
+    startCell:'A20', extraFields:[{key:'plano',label:'N° de Plano'},{key:'ejecutora',label:'Ejecutora'}]
+  },
+  {
+    key:'d5', label:'Acometidas', title:'Detalle de traslado de acometidas subterráneas BT',
+    kind:'activities',
+    desc:'Cada vía es una acometida (suministro). Agrega su N° de plano, ejecutora, actividad ejecutada, tipo de acometida y llave, y los materiales usados (cables, terminales, empalmes de traslado según fase 1Ø/3Ø).',
+    startCell:'A18', extraFields:[{key:'plano',label:'N° de Plano'},{key:'ejecutora',label:'Ejecutora'},{key:'actividad',label:'Actividad Ejecutada'},{key:'tipoAcometida',label:'Tipo Acometida'},{key:'llave',label:'Nro. De Llave'}]
+  },
+  {
+    key:'d6', label:'AP Aérea', title:'Detalle de trabajos en redes aéreas AP',
+    kind:'activities',
+    desc:'Para trabajos aéreos (postes, crucetas, red trenzada, pastorales, etc). Cada vía puede ser un poste o tramo.',
+    startCell:'A20', extraFields:[{key:'armado',label:'Tipo de Armado'},{key:'plano',label:'N° de Plano'},{key:'ejecutora',label:'Ejecutora'}]
+  },
+  {
+    key:'embebido', label:'Embebido', title:'Detalle de cruzadas embebido/concreto',
+    kind:'fields',
+    desc:'Formulario directo por vía para cruzadas embebidas en concreto. El campo "Total (m³)" se calcula automáticamente: (Largo×Ancho×Profundidad) − (0.0182322216×Cant. Tubos×Largo).',
+    startCell:'A16',
+    fields:[
+      {key:'plano',label:'N° de Plano', type:'text'},
+      {key:'cantTubos',label:"Cant. Tubos 6' (M) vías"},
+      {key:'largo',label:'Largo'},
+      {key:'ancho',label:'Ancho'},
+      {key:'profundidad',label:'Profundidad Concretado'},
+    ],
+    totalLabel:'Total (m³)',
+    totalFormula:(f)=> (num(f.largo)*num(f.ancho)*num(f.profundidad)) - (0.0182322216*num(f.cantTubos)*num(f.largo)),
+    summary:{ code:2100933, desc:"Mt Bt Suministro E Instalación De Concreto F'C=210 Kg/Cm2 Con Aditivo Acelerante De Fragua (Uso Para Cruzadas)", unidad:'M3' }
+  },
+  {
+    key:'resane', label:'Resane', title:'Detalle de reparación concreto, vereda, jardines y asfalto',
+    kind:'servicios',
+    desc:'Elige la prestación/servicio y agrega el detalle por vía. El campo "Total M2" se calcula automáticamente y se agrupa en el resumen general por prestación.',
+    fields:[
+      {key:'plano',label:'N° de Plano', type:'text'},
+      {key:'ejecutor',label:'Ejecutor', type:'text'},
+      {key:'largo',label:'Largo (ml)'},
+      {key:'ancho',label:'Ancho'},
+      {key:'espesor',label:'Espesor', disabledWhen:(via)=> via.servicio && String(via.servicio.code)==='2100803'},
+      {key:'descontar',label:'Descontar m2'},
+    ],
+    totalLabel:'Total M2',
+    // Igual que la fórmula de "Total M2" de la hoja "resane" del Excel:
+    // =(Largo*Ancho*factor(Espesor)) - Descontar
+    // Excepción: cuando la prestación elegida es 2100803 ("CUANDO SOLO ES RESANE DE VEREDA"),
+    // el espesor se deshabilita y el total es únicamente Largo x Ancho.
+    totalFormula:(f, via)=>{
+      const L=num(f.largo), A=num(f.ancho);
+      if(via && via.servicio && String(via.servicio.code)==='2100803'){
+        return L*A;
+      }
+      const G=num(f.espesor), D=num(f.descontar);
+      return (L*A*resaneFactor(G)) - D;
+    },
+    servicios:[
+      {code:2100808, desc:'Mtbtap-Corte, Demol. Reconst. Ver. 10Cm'},
+      {code:2100463, desc:'Mtbt-Reconstruccion De Calzada Asfalto.'},
+      {code:2100461, desc:'Mtbt-Recons Repos Pav Horm 200-250 E=0.2'},
+      {code:2100809, desc:'Mtbtap-Corte, Demol. Reconst. Ver. 15Cm', nota:'MAS 0.15CM'},
+      {code:2100813, desc:'Mtbtap-Corte, Demol. Repos Adoquin', nota:'ADOQUIN EN VEREDA PISTA'},
+      {code:2100814, desc:'Mtbtap-Cort, Demol. Rec. Rep Especial', nota:'VEREDA ESPECIAL (CERÁMICO, MAYÓLICA, PORCELANATO) + (PIEDRAS TRATADAS O DISEÑOS) TCO00511 (SUM. MATERIALES POR EL CONTRATISTA)'},
+      {code:2100803, desc:'Mtbtap-Reconst. Ver. Conc/Asf <=15Cm 210', nota:'CUANDO SOLO ES RESANE DE VEREDA'},
+      {code:2100807, desc:'Mtbtap-Rotura Vereda Hasta 15Cm'},
+    ]
+  },
+  {
+    key:'aca', label:'Acarreo', title:'Detalle de acarreo de materiales y traslado de postes "Lugar Difícil Acceso"',
+    kind:'fields',
+    desc:'Formulario directo por poste para el traslado desde el punto de acopio hasta el último acceso de grúa. Ingresa la distancia (ml) de cada tramo recorrido; el campo "Total (ml)" suma los tramos ingresados. Referencia del Excel original: prestación 2100800 (Traslado Manual de Poste) para el traslado de postes y 2100344 (Adicional Excavación en Roca) para el acarreo de conc.-listo y agregados — esa parte (con el cálculo de cuadrilla/horas) no está automatizada aquí y se sigue llevando aparte.',
+    startCell:'A11',
+    fields:[
+      {key:'tramo1',label:'Tramo 1 (ml)'},
+      {key:'tramo2',label:'Tramo 2 (ml)'},
+      {key:'tramo3',label:'Tramo 3 (ml)'},
+      {key:'tramo4',label:'Tramo 4 (ml)'},
+      {key:'tramo5',label:'Tramo 5 (ml)'},
+      {key:'tramo6',label:'Tramo 6 (ml)'},
+      {key:'tramo7',label:'Tramo 7 (ml)'},
+      {key:'tramo8',label:'Tramo 8 (ml)'},
+      {key:'tramo9',label:'Tramo 9 (ml)'},
+      {key:'tramo10',label:'Tramo 10 (ml)'},
+    ],
+    totalLabel:'Total (ml)',
+    totalFormula:(f)=> ['tramo1','tramo2','tramo3','tramo4','tramo5','tramo6','tramo7','tramo8','tramo9','tramo10']
+      .reduce((acc,k)=> acc + num(f[k]), 0)
+  },
+];
+
+/* ---------- Conexión al servidor (Apps Script) para el módulo Cuadre de Materiales ----------
+   El "Cuadre de Materiales" es la parte del sistema que decide dinero: saldos,
+   cantidad actual y totales ejecutados. Esos números ya NO se calculan en el
+   navegador — se calculan en Code.gs a partir de los mismos datos, y el
+   cliente solo pide el resultado y lo pinta. Ver README para desplegar el
+   backend y completar API_URL / SHARED_SECRET. */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwOU7DruqNlrnqmAy2jdNU1GoCexHXn7oEQ9eXXU46D-G3H2lRD7qEqZcCmvydT4U2chQ/exec';
+const SHARED_SECRET = '261220faa3ee95eea48c2b8dee4d64fe';
+
+// La clave de licencia se pide UNA vez (pantalla de licencia), se guarda en
+// localStorage para no pedirla en cada visita, y se reenvía en TODA llamada
+// al servidor. El servidor la vuelve a validar en cada request (no solo al
+// entrar) — ver validateLicense_ en Code.gs.
+const LICENSE_STORAGE_KEY = 'cobra_license_key';
+let LICENSE_KEY = localStorage.getItem(LICENSE_STORAGE_KEY) || '';
+
+async function llamarServidor(action, extra){
+  extra = extra || {};
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, secret: SHARED_SECRET, licenseKey: LICENSE_KEY, clientDomain: window.location.hostname, ...extra })
+  });
+  const data = await res.json();
+  if(data.ok === false) throw new Error(data.error || 'Error del servidor');
+  return data;
+}
+
+// Payload con TODO lo que el servidor necesita para recalcular el cuadre.
+// Es la única fuente que viaja al backend; el backend nunca confía en un
+// "total" o "saldo" ya calculado, siempre lo vuelve a construir desde aquí.
+function buildCuadrePayload(){
+  return {
+    presupuestoMateriales: STATE.presupuesto.materiales || [],
+    salidaRows: STATE.cuadre.salidaRows || [],
+    devolucionRows: STATE.cuadre.devolucionRows || [],
+    extraMateriales: STATE.cuadre.extraMateriales || [],
+    columns: STATE.cuadre.columns || [],
+    ejec: STATE.cuadre.ejec || {},
+    d1: STATE.d1 || {vias:[]},
+    d4: STATE.d4 || {vias:[]},
+    d6: STATE.d6 || {vias:[]},
+  };
+}
+
+// Caché del último resultado que devolvió el servidor, para no bloquear la
+// UI en cada tecla: se refresca al entrar al panel y al perder foco (blur)
+// de una cantidad ejecutada, igual que antes hacía renderAll() localmente.
+let CUADRE_CACHE = null;
+
+async function refrescarCuadreDesdeServidor(){
+  const data = await llamarServidor('calcularCuadre', { payload: buildCuadrePayload() });
+  CUADRE_CACHE = data; // { materiales, autoColumns, autoQty, totales }
+  return data;
+}
+
+/* ---------- Utilidades numéricas / fórmulas de "Embebido" y "Resane" ---------- */
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+// Formato numérico estándar de todo el proyecto: 3 decimales fijos.
+function formatNum(n){
+  if(!isFinite(n)) return '0.000';
+  return (Math.round((n + Number.EPSILON) * 1000) / 1000).toFixed(3);
+}
+function roundUp1(n){ return Math.ceil(n*10)/10; }
+// Da formato "Nombre Propio" (primera letra de cada palabra en mayúscula, resto en
+// minúscula) a los valores de texto que se muestran en el detalle y el resumen de
+// los reportes (pantalla, PDF y CSV). No modifica lo que la persona escribe en los
+// campos, solo cómo se muestra en los reportes.
+function toProperCase(v){
+  if(v===undefined || v===null) return v;
+  const s = String(v);
+  if(!s.trim()) return s;
+  return s.toLowerCase().replace(/(^|[\s\-\/(])([a-záéíóúñü])/gi, (m, sep, chr)=> sep + chr.toUpperCase());
+}
+
+// Para fichas kind:'activities' (MT/BT Subterránea, AP Aérea): cada actividad
+// guarda (al agregarse) una foto de la descripción de vía y los campos extra
+// (Armado, N° de Plano, Ejecutora) vigentes en ese momento — via.desc y
+// via.extra pueden seguir editándose después para otro grupo/poste dentro de
+// la misma tarjeta, así que el detalle, el resumen y el PDF deben usar SIEMPRE
+// esta foto por fila, y solo recurrir a los valores actuales de la vía como
+// respaldo para datos antiguos que no la tengan.
+function itemContext(via, it){
+  if(it && it.viaSnap){
+    return { desc: it.viaSnap.desc || '', extra: it.viaSnap.extra || {} };
+  }
+  return { desc: (via && via.desc) || '', extra: (via && via.extra) || {} };
+}
+// Factor de la fórmula de "Total M2" de la ficha Resane (según formato_liq.xlsx, hoja "resane"):
+// PRODUCT(Largo,Ancho, IF(Descontar<=0.1, ROUNDUP(Descontar,1)/0.1, IF(Descontar<0.15, ROUNDUP(Descontar,1)/0.2, Descontar/0.15)))
+function resaneFactor(g){
+  if(g<=0.1) return roundUp1(g)/0.1;
+  if(g<0.15) return roundUp1(g)/0.2;
+  return g/0.15;
+}
+
+const STORAGE_KEY = 'cobra_liquidaciones_v1';
+let STATE = loadState();
+
+function emptyPresupuesto(){
+  return { header:null, servicios:[], materiales:[] };
+}
+function emptyCuadre(){
+  return { salidaFileName:null, salidaRows:[], devolucionFileName:null, devolucionRows:[], columns:[], ejec:{}, extraMateriales:[], observaciones:{} };
+}
+function emptyAsociaciones(){
+  const a = {};
+  SHEETS.filter(s=>s.kind==='activities').forEach(s=> a[s.key] = {});
+  return a;
+}
+// Clave que identifica una "actividad" única del catálogo (independiente de la variante/material y de la columna del Excel original)
+function activityKeyFor(it){
+  return String(it.code) + '||' + it.desc;
+}
+function migrateAsociaciones(s){
+  if(!s.asociaciones) s.asociaciones = emptyAsociaciones();
+  SHEETS.filter(sh=>sh.kind==='activities').forEach(sh=>{
+    if(!s.asociaciones[sh.key]) s.asociaciones[sh.key] = {};
+    const map = s.asociaciones[sh.key];
+    Object.keys(map).forEach(k=>{
+      const v = map[k];
+      if(v && !Array.isArray(v.materiales)){
+        // formato anterior: { codigo, desc } guardado directamente bajo la columna del catálogo
+        if(v.codigo){
+          const it = CATALOG[sh.key].find(c=>c.col===k);
+          if(it){
+            const key = activityKeyFor(it);
+            if(!map[key]) map[key] = { grupo: it.grupo, desc: it.desc, materiales: [] };
+            if(!map[key].materiales.some(m=>m.codigo===v.codigo)){
+              map[key].materiales.push({codigo:v.codigo, desc:v.desc||''});
+            }
+          }
+        }
+        delete map[k];
+      }
+    });
+  });
+  return s;
+}
+// Migra los datos guardados con las claves anteriores ('con' y 've') a las nuevas
+// fichas 'embebido' y 'resane'. La ficha 'embebido' conserva la misma forma de datos
+// (fields), así que se traspasa directo. La ficha 'resane' cambió de estructura
+// (nuevos campos + prestación por detalle), así que sus datos previos se conservan
+// como respaldo en '_veLegacy' sin migrarlos automáticamente, para no generar
+// inconsistencias.
+function migrateSheetKeys(s){
+  if(s.con && !s.embebido){ s.embebido = s.con; delete s.con; }
+  if(!s.embebido) s.embebido = {vias:[]};
+  if(s.ve && !s.resane){ s._veLegacy = s.ve; delete s.ve; }
+  if(!s.resane) s.resane = {vias:[]};
+  SHEETS.forEach(sh=>{ if(!s[sh.key]) s[sh.key] = {vias:[]}; });
+  return s;
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(!s.presupuesto) s.presupuesto = emptyPresupuesto();
+      if(!s.cuadre) s.cuadre = emptyCuadre();
+      if(!s.cuadre.columns) s.cuadre.columns = [];
+      if(!s.cuadre.ejec) s.cuadre.ejec = {};
+      if(!s.cuadre.extraMateriales) s.cuadre.extraMateriales = [];
+      if(!s.cuadre.observaciones) s.cuadre.observaciones = {};
+      migrateSheetKeys(s);
+      migrateAsociaciones(s);
+      return s;
+    }
+  }catch(e){}
+  const s = {};
+  SHEETS.forEach(sh=> s[sh.key] = {vias:[]});
+  s.presupuesto = emptyPresupuesto();
+  s.cuadre = emptyCuadre();
+  s.asociaciones = emptyAsociaciones();
+  return s;
+}
+function saveState(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+}
+function resetAll(){
+  if(!confirm('¿Borrar todos los datos ingresados, incluido el presupuesto importado? Esta acción no se puede deshacer.')) return;
+  SHEETS.forEach(sh=> STATE[sh.key] = {vias:[]});
+  STATE.presupuesto = emptyPresupuesto();
+  STATE.cuadre = emptyCuadre();
+  STATE.asociaciones = emptyAsociaciones();
+  saveState();
+  renderAll();
+}
+
+let activeTab = 'presupuesto';
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+/* ---------- render tabs ---------- */
+const tabsEl = document.getElementById('tabs');
+
+const presupuestoTabBtn = document.createElement('button');
+presupuestoTabBtn.textContent = '📋 Presupuesto (ODM)';
+presupuestoTabBtn.dataset.key = 'presupuesto';
+presupuestoTabBtn.onclick = ()=>{ activeTab = 'presupuesto'; renderAll(); };
+tabsEl.appendChild(presupuestoTabBtn);
+
+const cuadreTabBtn = document.createElement('button');
+cuadreTabBtn.textContent = '🧮 Cuadre Materiales';
+cuadreTabBtn.dataset.key = 'cuadre';
+cuadreTabBtn.onclick = ()=>{ activeTab = 'cuadre'; CUADRE_CACHE = null; renderAll(); };
+tabsEl.appendChild(cuadreTabBtn);
+
+const asociarTabBtn = document.createElement('button');
+asociarTabBtn.textContent = '🔗 Asociar Materiales';
+asociarTabBtn.dataset.key = 'asociar';
+asociarTabBtn.onclick = ()=>{ activeTab = 'asociar'; renderAll(); };
+tabsEl.appendChild(asociarTabBtn);
+
+SHEETS.forEach(sh=>{
+  const b = document.createElement('button');
+  b.textContent = sh.label;
+  b.dataset.key = sh.key;
+  b.onclick = ()=>{ activeTab = sh.key; renderAll(); };
+  tabsEl.appendChild(b);
+});
+
+const mainEl = document.getElementById('main');
+
+const presupuestoPanel = document.createElement('section');
+presupuestoPanel.className = 'panel';
+presupuestoPanel.id = 'panel-presupuesto';
+mainEl.appendChild(presupuestoPanel);
+
+const cuadrePanel = document.createElement('section');
+cuadrePanel.className = 'panel';
+cuadrePanel.id = 'panel-cuadre';
+mainEl.appendChild(cuadrePanel);
+
+const asociarPanel = document.createElement('section');
+asociarPanel.className = 'panel';
+asociarPanel.id = 'panel-asociar';
+mainEl.appendChild(asociarPanel);
+
+SHEETS.forEach(sh=>{
+  const p = document.createElement('section');
+  p.className = 'panel';
+  p.id = 'panel-'+sh.key;
+  mainEl.appendChild(p);
+});
+
+function renderAll(){
+  [...tabsEl.children].forEach(b=> b.classList.toggle('active', b.dataset.key===activeTab));
+  presupuestoPanel.classList.toggle('active', activeTab==='presupuesto');
+  cuadrePanel.classList.toggle('active', activeTab==='cuadre');
+  asociarPanel.classList.toggle('active', activeTab==='asociar');
+  SHEETS.forEach(sh=>{
+    document.getElementById('panel-'+sh.key).classList.toggle('active', sh.key===activeTab);
+  });
+  if(activeTab==='presupuesto'){
+    renderPresupuestoPanel();
+    return;
+  }
+  if(activeTab==='cuadre'){
+    renderCuadrePanel();
+    return;
+  }
+  if(activeTab==='asociar'){
+    renderAsociarPanel();
+    return;
+  }
+  const sh = SHEETS.find(s=>s.key===activeTab);
+  renderPanel(sh);
+}
+
+function renderPanel(sh){
+  const panel = document.getElementById('panel-'+sh.key);
+  const st = STATE[sh.key];
+  panel.innerHTML = '';
+
+  const head = document.createElement('div');
+  head.className = 'panel-head';
+  head.innerHTML = `
+    <div>
+      <h2>${sh.title}</h2>
+      <p>${sh.desc}</p>
+    </div>
+    <div class="panel-actions">
+      <button class="btn btn-outline btn-small" data-act="export">⬇ Exportar CSV</button>
+      ${sh.kind==='activities' ? '<button class="btn btn-outline btn-small" data-act="export-detalle">⬇ Exportar Detalle (Grupo/Materiales)</button>' : ''}
+      <button class="btn btn-coral btn-small" data-act="export-pdf">📄 Generar PDF</button>
+      ${sh.kind!=='servicios' ? '<button class="btn btn-primary btn-small" data-act="add-via">+ Agregar vía</button>' : ''}
+    </div>`;
+  if(head.querySelector('[data-act="add-via"]')){
+    head.querySelector('[data-act="add-via"]').onclick = ()=> addVia(sh);
+  }
+  head.querySelector('[data-act="export"]').onclick = ()=> exportCSV(sh);
+  head.querySelector('[data-act="export-pdf"]').onclick = ()=> exportPDF(sh);
+  if(head.querySelector('[data-act="export-detalle"]')){
+    head.querySelector('[data-act="export-detalle"]').onclick = ()=> exportDetalleCSV(sh);
+  }
+  panel.appendChild(head);
+
+  if(sh.kind==='servicios'){
+    panel.appendChild(renderServicioSelector(sh));
+  }
+
+  if(st.vias.length===0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    if(sh.kind==='servicios'){
+      empty.innerHTML = `Aún no hay detalles registrados en esta ficha.<br><br>Elige una prestación/servicio arriba y agrega el primer detalle.`;
+    } else {
+      empty.innerHTML = `Aún no hay vías registradas en esta hoja.<br><br>
+        <button class="btn btn-primary btn-small" id="empty-add">+ Agregar la primera vía</button>`;
+    }
+    panel.appendChild(empty);
+    if(document.getElementById('empty-add')){
+      document.getElementById('empty-add').onclick = ()=> addVia(sh);
+    }
+  } else {
+    st.vias.forEach((via, idx)=> panel.appendChild(renderVia(sh, via, idx)));
+  }
+
+  if(sh.kind==='activities'){
+    panel.appendChild(renderSummary(sh));
+  } else if(sh.kind==='fields' && sh.summary){
+    panel.appendChild(renderFieldsSummary(sh));
+  } else if(sh.kind==='servicios'){
+    panel.appendChild(renderServiciosSummary(sh));
+  }
+
+  const note = document.createElement('div');
+  note.className='note';
+  note.textContent = sh.kind==='servicios'
+    ? 'Cada detalle queda asociado a la prestación elegida y se suma automáticamente en el resumen general por prestación. Exporta a CSV para pegar los datos en el Excel.'
+    : `Al exportar, el CSV respeta el orden de columnas del Excel original — puedes pegarlo directo a partir de la celda ${sh.startCell} de la hoja "${sh.key}".`;
+  panel.appendChild(note);
+}
+
+function renderServicioSelector(sh){
+  const wrap = document.createElement('div');
+  wrap.className = 'add-item-row add-servicio-row';
+
+  const fWrap = document.createElement('div');
+  fWrap.className = 'field';
+  fWrap.innerHTML = `<label>Prestación / Servicio</label>`;
+  const sel = document.createElement('select');
+  sh.servicios.forEach(s=>{
+    const opt = document.createElement('option');
+    opt.value = String(s.code);
+    opt.textContent = `${s.code} · ${s.desc}`;
+    sel.appendChild(opt);
+  });
+  fWrap.appendChild(sel);
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary btn-small';
+  addBtn.textContent = '+ Agregar detalle';
+  addBtn.onclick = ()=>{
+    const servicio = sh.servicios.find(s=> String(s.code)===sel.value);
+    if(!servicio) return;
+    const via = {id:uid(), desc:'', extra:{}, items:[], fields:{}, servicio:{code:servicio.code, desc:servicio.desc}};
+    STATE[sh.key].vias.push(via);
+    saveState();
+    renderAll();
+  };
+
+  wrap.appendChild(fWrap);
+  wrap.appendChild(addBtn);
+  return wrap;
+}
+
+function addVia(sh){
+  const via = {id:uid(), desc:'', extra:{}, items:[], fields:{}};
+  STATE[sh.key].vias.push(via);
+  saveState();
+  renderAll();
+}
+function removeVia(sh, id){
+  if(!confirm('¿Quitar esta vía y sus datos?')) return;
+  STATE[sh.key].vias = STATE[sh.key].vias.filter(v=>v.id!==id);
+  saveState();
+  renderAll();
+}
+
+function renderVia(sh, via, idx){
+  const card = document.createElement('div');
+  card.className = 'via-card';
+
+  const head = document.createElement('div');
+  head.className = 'via-head';
+
+  if(sh.kind==='activities'){
+    const grupoWrap = document.createElement('div');
+    grupoWrap.className = 'field-mini grupo-field';
+    grupoWrap.innerHTML = `<label>Grupo (agrupa actividades)</label>`;
+    const grupoInput = document.createElement('input');
+    grupoInput.type = 'text';
+    grupoInput.placeholder = 'Ej: Vía 1, Tramo A...';
+    grupoInput.value = via.grupoLabel || '';
+    grupoInput.title = 'Valor que agrupa las actividades de esta tarjeta y se muestra en la columna "Grupo" del listado detalle.';
+    grupoInput.oninput = ()=>{ via.grupoLabel = grupoInput.value; saveState(); };
+    grupoInput.onchange = ()=>{ renderAll(); };
+    grupoWrap.appendChild(grupoInput);
+    head.appendChild(grupoWrap);
+  } else if(sh.kind==='servicios'){
+    head.classList.add('via-head-resane');
+    const badge = document.createElement('span');
+    badge.className = 'via-badge';
+    badge.textContent = via.servicio ? String(via.servicio.code) : 'Servicio';
+    badge.title = via.servicio ? via.servicio.desc : '';
+    head.appendChild(badge);
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'via-badge';
+    badge.textContent = via.desc ? 'Vía ' + (idx+1) : '';
+    if(via.desc) head.appendChild(badge);
+  }
+
+  const descInput = document.createElement('input');
+  descInput.type = 'text';
+  descInput.placeholder = 'Descripción / referencia de la vía (ej. Ca. Las Válvulas)';
+  descInput.value = via.desc || '';
+  descInput.oninput = ()=>{ via.desc = descInput.value; saveState(); };
+  head.appendChild(descInput);
+
+  (sh.extraFields||[]).forEach(ef=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'field-mini';
+    const lab = document.createElement('label'); lab.textContent = ef.label;
+    const inp = document.createElement('input'); inp.type='text';
+    inp.value = via.extra[ef.key] || '';
+    inp.oninput = ()=>{ via.extra[ef.key] = inp.value; saveState(); };
+    wrap.appendChild(lab); wrap.appendChild(inp);
+    head.appendChild(wrap);
+  });
+
+  let resaneTotalOut = null;
+  if(sh.kind==='servicios'){
+    // Ficha Resane: todos los campos de detalle van en la misma fila del
+    // encabezado (más angostos) para que la tarjeta ocupe una sola línea.
+    const updateComputedTotal = ()=>{
+      if(resaneTotalOut && sh.totalFormula) resaneTotalOut.value = formatNum(sh.totalFormula(via.fields, via));
+      refreshSummaryBox(sh);
+    };
+    (sh.fields||[]).forEach(f=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'field-mini field-mini-resane field-'+f.key;
+      const lab = document.createElement('label'); lab.textContent = f.label;
+      const inp = document.createElement('input');
+      if(f.type==='text'){ inp.type='text'; inp.placeholder='-'; }
+      else { inp.type='number'; inp.step='any'; inp.placeholder='0'; }
+      const isDisabled = f.disabledWhen ? !!f.disabledWhen(via) : false;
+      if(isDisabled){
+        wrap.classList.add('field-disabled');
+        inp.disabled = true;
+        inp.placeholder = 'No aplica';
+        inp.value = '';
+      } else {
+        inp.value = via.fields[f.key] ?? '';
+      }
+      inp.oninput = ()=>{ via.fields[f.key]=inp.value; saveState(); updateComputedTotal(); };
+      wrap.appendChild(lab); wrap.appendChild(inp);
+      head.appendChild(wrap);
+    });
+    if(sh.totalFormula){
+      const wrap = document.createElement('div');
+      wrap.className = 'field-mini field-mini-resane field-readonly';
+      const lab = document.createElement('label'); lab.textContent = sh.totalLabel || 'Total';
+      resaneTotalOut = document.createElement('input');
+      resaneTotalOut.type='text'; resaneTotalOut.readOnly = true; resaneTotalOut.className='computed-total';
+      resaneTotalOut.value = formatNum(sh.totalFormula(via.fields, via));
+      wrap.appendChild(lab); wrap.appendChild(resaneTotalOut);
+      head.appendChild(wrap);
+    }
+  }
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'remove-x';
+  delBtn.title = 'Eliminar vía';
+  delBtn.textContent = '✕';
+  delBtn.onclick = ()=> removeVia(sh, via.id);
+  head.appendChild(delBtn);
+
+  card.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'via-body';
+
+  if(sh.kind==='activities'){
+    body.appendChild(renderItemsTable(sh, via));
+    body.appendChild(renderAddItemRow(sh, via));
+    card.appendChild(body);
+  } else if(sh.kind!=='servicios'){
+    body.appendChild(renderFieldsGrid(sh, via));
+    card.appendChild(body);
+  }
+
+  return card;
+}
+
+let expandedItemUids = new Set();
+
+function renderItemsTable(sh, via){
+  if(via.items.length===0){
+    const p = document.createElement('div');
+    p.className = 'mini-tag';
+    p.textContent = 'Sin actividades agregadas todavía.';
+    p.style.marginBottom='8px';
+    return p;
+  }
+  const hasArmado = !!(sh.extraFields||[]).find(f=>f.key==='armado');
+
+  const table = document.createElement('table');
+  table.className = 'items-table';
+  table.innerHTML = `<thead><tr>
+    <th class="col-toggle"></th>
+    <th class="col-grupo">Grupo</th>
+    ${hasArmado ? '<th class="col-armado">Tipo de Armado</th>' : ''}
+    <th class="col-act">Actividad</th>
+    <th class="col-mat">Material / variante</th>
+    <th class="col-cant">Cant.</th>
+    <th class="col-rm"></th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  const numCols = 6 + (hasArmado?1:0);
+
+  via.items.forEach(it=>{
+    // Compatibilidad con formatos anteriores.
+    if(!it.materiales){
+      it.materiales = it.material ? [{...it.material, cantidad:''}] : [];
+    }
+    if(it.grupoLabel===undefined){
+      it.grupoLabel = via.grupoLabel || '';
+    }
+    const materiales = it.materiales;
+    const expanded = expandedItemUids.has(it.uid);
+
+    const tr = document.createElement('tr');
+    tr.className = 'row-activity';
+
+    const tdToggle = document.createElement('td');
+    tdToggle.className = 'col-toggle';
+    if(materiales.length>0){
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'row-toggle';
+      toggleBtn.title = expanded ? 'Ocultar materiales' : 'Ver / cargar materiales (' + materiales.length + ')';
+      toggleBtn.textContent = expanded ? '▾' : '▸';
+      toggleBtn.onclick = ()=>{
+        if(expandedItemUids.has(it.uid)) expandedItemUids.delete(it.uid);
+        else expandedItemUids.add(it.uid);
+        renderAll();
+      };
+      tdToggle.appendChild(toggleBtn);
+    }
+    tr.appendChild(tdToggle);
+
+    const tdGrupo = document.createElement('td');
+    tdGrupo.className = 'col-grupo';
+    const grupoInlineInput = document.createElement('input');
+    grupoInlineInput.type = 'text';
+    grupoInlineInput.className = 'grupo-inline-input';
+    grupoInlineInput.placeholder = 'Sin grupo';
+    grupoInlineInput.title = 'Corrige el grupo de esta actividad sin borrarla ni volver a ingresarla.';
+    grupoInlineInput.value = it.grupoLabel || '';
+    grupoInlineInput.oninput = ()=>{ it.grupoLabel = grupoInlineInput.value; saveState(); };
+    grupoInlineInput.onblur = ()=> renderAll();
+    tdGrupo.appendChild(grupoInlineInput);
+    const grupoColTag = document.createElement('span');
+    grupoColTag.className = 'mini-tag';
+    grupoColTag.textContent = `[${it.col}]`;
+    tdGrupo.appendChild(grupoColTag);
+    tr.appendChild(tdGrupo);
+
+    if(hasArmado){
+      const tdArmado = document.createElement('td');
+      tdArmado.className = 'col-armado';
+      const ctxArmado = itemContext(via, it).extra;
+      const armadoInlineInput = document.createElement('input');
+      armadoInlineInput.type = 'text';
+      armadoInlineInput.className = 'armado-inline-input';
+      armadoInlineInput.placeholder = '—';
+      armadoInlineInput.title = 'Corrige el tipo de armado de esta actividad sin borrarla ni volver a ingresarla.';
+      armadoInlineInput.value = (ctxArmado && ctxArmado.armado) ? ctxArmado.armado : '';
+      armadoInlineInput.oninput = ()=>{
+        if(!it.viaSnap) it.viaSnap = { desc: via.desc || '', extra: {...via.extra} };
+        if(!it.viaSnap.extra) it.viaSnap.extra = {};
+        it.viaSnap.extra.armado = armadoInlineInput.value;
+        saveState();
+      };
+      armadoInlineInput.onblur = ()=> renderAll();
+      tdArmado.appendChild(armadoInlineInput);
+      tr.appendChild(tdArmado);
+    }
+
+    const tdAct = document.createElement('td');
+    tdAct.className = 'col-act';
+    tdAct.textContent = it.code ? `${it.code} · ${toProperCase(it.desc)}` : toProperCase(it.desc);
+    tr.appendChild(tdAct);
+
+    const tdMat = document.createElement('td');
+    tdMat.className = 'col-mat';
+    tdMat.innerHTML = '';
+    tr.appendChild(tdMat);
+
+    const tdCant = document.createElement('td');
+    tdCant.className = 'col-cant';
+    const qtyActInput = document.createElement('input');
+    qtyActInput.type = 'number';
+    qtyActInput.step = 'any';
+    qtyActInput.placeholder = '0';
+    qtyActInput.className = 'qty-inline-input';
+    qtyActInput.value = (it.qty===undefined||it.qty===null) ? '' : it.qty;
+    qtyActInput.oninput = ()=>{
+      it.qty = qtyActInput.value===''? '' : parseFloat(qtyActInput.value);
+      saveState();
+    };
+    qtyActInput.onblur = ()=> renderAll();
+    tdCant.appendChild(qtyActInput);
+    tr.appendChild(tdCant);
+
+    const tdRm = document.createElement('td');
+    tdRm.className = 'col-rm';
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'remove-x';
+    rmBtn.textContent = '✕';
+    rmBtn.onclick = ()=>{
+      via.items = via.items.filter(x=>x.uid!==it.uid);
+      expandedItemUids.delete(it.uid);
+      saveState(); renderAll();
+    };
+    tdRm.appendChild(rmBtn);
+    tr.appendChild(tdRm);
+
+    tbody.appendChild(tr);
+
+    if(expanded && materiales.length>0){
+      materiales.forEach((m, mi)=>{
+        const mtr = document.createElement('tr');
+        mtr.className = 'row-material';
+
+        mtr.appendChild(document.createElement('td')).className = 'col-toggle';
+
+        const mtdGrupo = document.createElement('td');
+        mtdGrupo.className = 'col-grupo';
+        mtr.appendChild(mtdGrupo);
+
+        if(hasArmado){
+          const mtdArmado = document.createElement('td');
+          mtdArmado.className = 'col-armado';
+          mtr.appendChild(mtdArmado);
+        }
+
+        const mtdAct = document.createElement('td');
+        mtdAct.className = 'col-act';
+        mtdAct.innerHTML = `<span class="mat-branch">↳</span> <span class="code-mat">${m.codigo}</span>`;
+        mtr.appendChild(mtdAct);
+
+        const mtdMat = document.createElement('td');
+        mtdMat.className = 'col-mat';
+        mtdMat.textContent = toProperCase(m.desc) || '';
+        mtr.appendChild(mtdMat);
+
+        const mtdCant = document.createElement('td');
+        mtdCant.className = 'col-cant';
+        const mq = document.createElement('input');
+        mq.type = 'number';
+        mq.step = 'any';
+        mq.placeholder = '0';
+        mq.className = 'qty-inline-input';
+        mq.value = (m.cantidad===undefined||m.cantidad===null) ? '' : m.cantidad;
+        mq.oninput = ()=>{
+          materiales[mi] = {...materiales[mi], cantidad: mq.value===''? '' : parseFloat(mq.value)};
+          it.materiales = materiales;
+          saveState();
+        };
+        mtdCant.appendChild(mq);
+        const cantActualDisp = m.codigo ? getCantActual(m.codigo) : null;
+        if(cantActualDisp!==null){
+          const dispBadge = document.createElement('span');
+          dispBadge.className = 'disp-badge' + (cantActualDisp<0 ? ' disp-neg' : '');
+          dispBadge.textContent = 'Disp. actual: ' + formatNum(cantActualDisp);
+          mtdCant.appendChild(dispBadge);
+        }
+        mtr.appendChild(mtdCant);
+
+        mtr.appendChild(document.createElement('td')).className = 'col-rm';
+
+        tbody.appendChild(mtr);
+      });
+    }
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+// Actividades del catálogo disponibles para agregar: con 1+ material(es) asociado(s)
+// o marcadas explícitamente como "Asociación" (sin material) en "Asociar Materiales".
+// Se deduplica por actividad (código + descripción) igual que en el panel "Asociar Materiales",
+// para no repetir una entrada por cada columna/variante del Excel original.
+function getAssociatedCatalog(sh){
+  const asoc = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
+  const map = new Map();
+  CATALOG[sh.key].forEach(it=>{
+    const key = activityKeyFor(it);
+    if(map.has(key)) return;
+    const a = asoc[key];
+    if(a && ((a.materiales && a.materiales.length>0) || a.sinMaterial===true)){
+      map.set(key, it);
+    }
+  });
+  return [...map.values()];
+}
+
+function renderAddItemRow(sh, via){
+  const wrap = document.createElement('div');
+  wrap.className = 'add-item-row';
+
+  const availableCatalog = getAssociatedCatalog(sh);
+
+  const listId = 'dl-'+sh.key;
+  let dl = document.getElementById(listId);
+  if(!dl){
+    dl = document.createElement('datalist');
+    dl.id = listId;
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = '';
+  availableCatalog.forEach(it=>{
+    const opt = document.createElement('option');
+    opt.value = labelFor(it);
+    dl.appendChild(opt);
+  });
+
+  const fWrap = document.createElement('div');
+  fWrap.className='field';
+  fWrap.innerHTML = `<label>Actividad (escribe para buscar)</label>
+    <input list="${listId}" placeholder="Ej: zanja, cable MT, terminal..." />
+    <div class="assoc-hint"></div>`;
+  const actInput = fWrap.querySelector('input');
+  const hintEl = fWrap.querySelector('.assoc-hint');
+
+  if(availableCatalog.length===0){
+    hintEl.textContent = '⚠ Aún no hay actividades asociadas a un material (o marcadas "Asociación") en esta ficha. Ve a "Asociar Materiales" para vincularlas primero.';
+    hintEl.classList.add('show');
+    hintEl.style.color = 'var(--accent3)';
+    hintEl.style.background = 'rgba(245,106,121,.08)';
+    hintEl.style.borderColor = 'rgba(245,106,121,.3)';
+  }
+
+  const asoc = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
+  actInput.oninput = ()=>{
+    const match = availableCatalog.find(it=> labelFor(it)===actInput.value);
+    const a = match ? asoc[activityKeyFor(match)] : null;
+    const mats = (a && a.materiales) ? a.materiales : [];
+    if(mats.length>0){
+      hintEl.textContent = '🔗 Esta actividad usa ' + mats.length + ' material(es): ' + mats.map(m=>m.codigo).join(', ') + '. Al agregarla podrás expandirla en el detalle para indicar la cantidad de cada material.';
+      hintEl.classList.add('show');
+      hintEl.style.color = ''; hintEl.style.background = ''; hintEl.style.borderColor = '';
+    } else if(a && a.sinMaterial){
+      hintEl.textContent = 'ℹ Actividad configurada para usarse sin material.';
+      hintEl.classList.add('show');
+      hintEl.style.color = ''; hintEl.style.background = ''; hintEl.style.borderColor = '';
+    } else if(availableCatalog.length>0){
+      hintEl.textContent = '';
+      hintEl.classList.remove('show');
+    }
+  };
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary btn-small';
+  addBtn.textContent = '+ Agregar';
+  addBtn.onclick = ()=>{
+    const match = availableCatalog.find(it=> labelFor(it)===actInput.value);
+    if(!match){ alert('Selecciona una actividad válida de la lista (debe tener al menos un material asociado, o estar marcada "Asociación", en "Asociar Materiales").'); return; }
+    const a = asoc[activityKeyFor(match)];
+    const materiales = (a && a.materiales) ? a.materiales.map(m=> ({codigo:m.codigo, desc:m.desc||'', cantidad:''})) : [];
+    const newUid = uid();
+    via.items.push({...match, qty:1, uid:newUid, materiales, grupoLabel: via.grupoLabel || '', viaSnap: { desc: via.desc || '', extra: {...via.extra} }});
+    if(materiales.length>0) expandedItemUids.add(newUid);
+    saveState();
+    actInput.value='';
+    hintEl.textContent=''; hintEl.classList.remove('show');
+    renderAll();
+  };
+
+  wrap.appendChild(fWrap);
+  wrap.appendChild(addBtn);
+  return wrap;
+}
+
+function labelFor(it){
+  return `${it.grupo? it.grupo+' · ':''}${it.desc}${it.variant? ' · '+it.variant:''} [${it.col}]`;
+}
+
+function renderFieldsGrid(sh, via){
+  const grid = document.createElement('div');
+  grid.className = 'fields-grid';
+  if(sh.key==='resane') grid.classList.add('fields-grid-resane');
+  let totalOut = null;
+  // Recalcula el total de esta fila Y el resumen general de la ficha, en cada
+  // cambio — sin esperar botones ni otras acciones.
+  const updateComputedTotal = ()=>{
+    if(totalOut && sh.totalFormula) totalOut.value = formatNum(sh.totalFormula(via.fields, via));
+    refreshSummaryBox(sh);
+  };
+  sh.fields.forEach(f=>{
+    const w = document.createElement('div');
+    w.className='field field-'+f.key;
+    const lab = document.createElement('label'); lab.textContent=f.label;
+    const inp = document.createElement('input');
+    if(f.type==='text'){
+      inp.type='text'; inp.placeholder='-';
+    } else {
+      inp.type='number'; inp.step='any'; inp.placeholder='0';
+    }
+    const isDisabled = f.disabledWhen ? !!f.disabledWhen(via) : false;
+    if(isDisabled){
+      w.classList.add('field-disabled');
+      inp.disabled = true;
+      inp.placeholder = 'No aplica';
+      inp.value = '';
+    } else {
+      inp.value = via.fields[f.key] ?? '';
+    }
+    inp.oninput = ()=>{ via.fields[f.key]=inp.value; saveState(); updateComputedTotal(); };
+    w.appendChild(lab); w.appendChild(inp);
+    grid.appendChild(w);
+  });
+  if(sh.totalFormula){
+    const w = document.createElement('div');
+    w.className='field field-readonly';
+    const lab = document.createElement('label'); lab.textContent = sh.totalLabel || 'Total';
+    totalOut = document.createElement('input');
+    totalOut.type='text'; totalOut.readOnly = true; totalOut.className='computed-total';
+    totalOut.value = formatNum(sh.totalFormula(via.fields, via));
+    w.appendChild(lab); w.appendChild(totalOut);
+    grid.appendChild(w);
+  }
+  return grid;
+}
+
+// Vuelve a calcular y reemplazar el bloque de "Resumen general" de una ficha,
+// en el lugar, sin re-renderizar todo el panel (evita perder el foco al escribir).
+function refreshSummaryBox(sh){
+  const old = document.getElementById('summary-box-'+sh.key);
+  if(!old) return;
+  let neu = null;
+  if(sh.kind==='activities'){
+    neu = renderSummary(sh);
+  } else if(sh.kind==='fields' && sh.summary){
+    neu = renderFieldsSummary(sh);
+  } else if(sh.kind==='servicios'){
+    neu = renderServiciosSummary(sh);
+  }
+  if(!neu) return;
+  neu.id = 'summary-box-'+sh.key;
+  old.replaceWith(neu);
+}
+
+function renderSummary(sh){
+  const box = document.createElement('div');
+  box.className = 'summary-box';
+  box.id = 'summary-box-'+sh.key;
+  const totals = {};
+  STATE[sh.key].vias.forEach(via=>{
+    via.items.forEach(it=>{
+      const key = it.col;
+      if(!totals[key]) totals[key] = {grupo:it.grupo, code:it.code, desc:it.desc, variant:it.variant, qty:0};
+      totals[key].qty += Number(it.qty)||0;
+    });
+  });
+  const rows = Object.values(totals).sort((a,b)=> (a.grupo||'').localeCompare(b.grupo||''));
+  box.innerHTML = `<h3>Resumen general (equivalente a "TOTAL GENERAL")</h3>`;
+  if(rows.length===0){
+    box.innerHTML += `<div class="mini-tag">Sin datos aún.</div>`;
+    return box;
+  }
+  const table = document.createElement('table');
+  table.className='summary-table';
+  table.innerHTML = `<thead><tr><th>Actividad</th><th>Material</th><th>Total</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const actTxt = r.code ? `${r.code} · ${toProperCase(r.desc)}` : toProperCase(r.desc);
+    tr.innerHTML = `<td>${actTxt}</td><td>${toProperCase(r.variant)||'—'}</td><td><b>${formatNum(r.qty)}</b></td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+  return box;
+}
+
+// Resumen general para fichas kind:'fields' que declaran sh.summary (ej. Embebido):
+// una sola actividad/código cuyo total es la suma del campo calculado (sh.totalFormula)
+// de todas las vías, igual que el "TOTAL GENERAL" del Excel.
+function renderFieldsSummary(sh){
+  const box = document.createElement('div');
+  box.className = 'summary-box';
+  box.id = 'summary-box-'+sh.key;
+  box.innerHTML = `<h3>Resumen general (equivalente a "TOTAL GENERAL")</h3>`;
+  const total = STATE[sh.key].vias.reduce((acc,via)=> acc + (sh.totalFormula(via.fields, via)||0), 0);
+  const table = document.createElement('table');
+  table.className='summary-table';
+  table.innerHTML = `<thead><tr><th>Código</th><th>Actividad</th><th>Unidad</th><th>Total</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${sh.summary.code}</td><td>${toProperCase(sh.summary.desc)}</td><td>${toProperCase(sh.summary.unidad)||''}</td><td><b>${formatNum(total)}</b></td>`;
+  tbody.appendChild(tr);
+  table.appendChild(tbody);
+  box.appendChild(table);
+  return box;
+}
+
+// Resumen general para fichas kind:'servicios' (ej. Resane): una fila por cada
+// prestación que YA tiene al menos un detalle agregado (no todo el catálogo),
+// sumando el total calculado de todos los detalles ingresados para esa prestación.
+// Se recalcula automáticamente con cada cambio (ver refreshSummaryBox).
+function renderServiciosSummary(sh){
+  const box = document.createElement('div');
+  box.className = 'summary-box';
+  box.id = 'summary-box-'+sh.key;
+  box.innerHTML = `<h3>Resumen general (equivalente a "RESUMEN ${sh.label.toUpperCase()}")</h3>`;
+  const grouped = {};
+  const order = [];
+  STATE[sh.key].vias.forEach(via=>{
+    if(!via.servicio) return;
+    const code = String(via.servicio.code);
+    if(!grouped[code]){
+      grouped[code] = { code: via.servicio.code, desc: via.servicio.desc, total: 0 };
+      order.push(code);
+    }
+    grouped[code].total += (sh.totalFormula(via.fields, via) || 0);
+  });
+  const rows = order.map(code=> grouped[code]);
+  if(rows.length===0){
+    box.innerHTML += `<div class="mini-tag">Sin datos aún.</div>`;
+    return box;
+  }
+  const table = document.createElement('table');
+  table.className='summary-table';
+  table.innerHTML = `<thead><tr><th>Prestación</th><th>Descripción</th><th>Total M2</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${r.code}</td><td>${toProperCase(r.desc)}</td><td><b>${formatNum(r.total)}</b></td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+  return box;
+}
+
+/* ---------- Asociar Materiales (vincula actividades embebidas de MT/BT/AP con materiales del Cuadre) ---------- */
+let asociarSheetKey = 'd1';
+
+function renderAsociarPanel(){
+  const panel = asociarPanel;
+  panel.innerHTML = '';
+  const activitySheets = SHEETS.filter(s=>s.kind==='activities');
+
+  const head = document.createElement('div');
+  head.className = 'panel-head';
+  head.innerHTML = `
+    <div>
+      <h2>Asociar Materiales</h2>
+      <p>Selecciona la ficha (MT Subterránea, BT Subterránea o AP Aérea), elige una de sus actividades y asócíala a uno o más materiales de la ficha "Cuadre de Materiales". El contador indica con cuántos materiales quedó asociada cada actividad; solo las actividades con contador mayor a 0 aparecerán disponibles para agregar en su ficha correspondiente.</p>
+    </div>`;
+  panel.appendChild(head);
+
+  const selectRow = document.createElement('div');
+  selectRow.className = 'sheet-select-row';
+  activitySheets.forEach(sh=>{
+    const b = document.createElement('button');
+    b.className = 'sheet-select-btn' + (sh.key===asociarSheetKey ? ' active' : '');
+    b.textContent = sh.label;
+    b.onclick = ()=>{ asociarSheetKey = sh.key; renderAll(); };
+    selectRow.appendChild(b);
+  });
+  panel.appendChild(selectRow);
+
+  const sh = activitySheets.find(s=>s.key===asociarSheetKey) || activitySheets[0];
+  const materiales = buildCuadreMateriales();
+
+  if(materiales.length===0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'Primero carga materiales en la ficha "Cuadre Materiales" (importa el presupuesto y/o el archivo de salidas) para poder asociarlos a las actividades.';
+    panel.appendChild(empty);
+    return;
+  }
+
+  if(!STATE.asociaciones[sh.key]) STATE.asociaciones[sh.key] = {};
+  const asocMap = STATE.asociaciones[sh.key];
+
+  // Deduplicar actividades del catálogo: una fila por actividad única (código + descripción),
+  // sin repetir por cada variante/columna del Excel original.
+  const activityMap = new Map();
+  CATALOG[sh.key].forEach(it=>{
+    const key = activityKeyFor(it);
+    if(!activityMap.has(key)){
+      activityMap.set(key, { key, grupo: it.grupo, code: it.code, desc: it.desc });
+    }
+  });
+  const activities = [...activityMap.values()];
+
+  const box = document.createElement('div');
+  box.className = 'budget-section';
+  box.innerHTML = `<h3>${sh.title} <span class="pill-count">${activities.length}</span></h3>`;
+
+  const table = document.createElement('table');
+  table.className = 'assoc-table';
+  table.innerHTML = `<thead><tr>
+    <th>Grupo</th><th>Actividad</th><th>Contador</th><th>Asociación</th>
+    <th>Materiales asociados</th><th>Agregar material del Cuadre</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+
+  activities.forEach(act=>{
+    const tr = document.createElement('tr');
+    const current = asocMap[act.key];
+    const count = (current && current.materiales) ? current.materiales.length : 0;
+
+    tr.innerHTML = `
+      <td>${act.grupo||''}</td>
+      <td>${act.code ? act.code+' · '+act.desc : act.desc}</td>
+      <td><span class="qty-pill">${count}</span></td>
+      <td class="td-sinmat"></td>
+      <td class="td-current"></td>
+      <td class="td-select"></td>`;
+
+    const tdSinMat = tr.querySelector('.td-sinmat');
+    const chkSinMat = document.createElement('input');
+    chkSinMat.type = 'checkbox';
+    const hasMats = count > 0;
+    chkSinMat.checked = hasMats || !!(current && current.sinMaterial);
+    chkSinMat.disabled = hasMats;
+    chkSinMat.title = hasMats
+      ? 'Ya está disponible para agregar porque tiene material(es) asociado(s).'
+      : 'Marca esta opción para que la actividad quede "asociada" y disponible en "+ Agregar actividad" aunque no tenga un material vinculado.';
+    chkSinMat.onchange = ()=>{
+      if(chkSinMat.checked){
+        if(!asocMap[act.key]) asocMap[act.key] = { grupo: act.grupo, desc: act.desc, materiales: [] };
+        asocMap[act.key].sinMaterial = true;
+      } else if(asocMap[act.key]){
+        delete asocMap[act.key].sinMaterial;
+        if(!asocMap[act.key].materiales || asocMap[act.key].materiales.length===0) delete asocMap[act.key];
+      }
+      saveState();
+      renderAll();
+    };
+    tdSinMat.appendChild(chkSinMat);
+
+    const tdCurrent = tr.querySelector('.td-current');
+    if(count===0){
+      tdCurrent.innerHTML = '<span class="assoc-none">Sin asociar</span>';
+    } else {
+      current.materiales.forEach((m, i)=>{
+        const chip = document.createElement('span');
+        chip.className = 'assoc-current';
+        chip.style.marginRight = '4px';
+        chip.style.marginBottom = '4px';
+        chip.textContent = m.codigo + (m.desc ? ' · '+m.desc : '') + ' ';
+        const x = document.createElement('button');
+        x.textContent = '✕';
+        x.title = 'Quitar este material de la asociación';
+        x.style.background = 'none';
+        x.style.border = 'none';
+        x.style.color = 'inherit';
+        x.style.cursor = 'pointer';
+        x.style.fontSize = '11px';
+        x.style.padding = '0';
+        x.style.marginLeft = '3px';
+        x.onclick = ()=>{
+          current.materiales.splice(i,1);
+          if(current.materiales.length===0 && !current.sinMaterial) delete asocMap[act.key];
+          saveState();
+          renderAll();
+        };
+        chip.appendChild(x);
+        tdCurrent.appendChild(chip);
+      });
+    }
+
+    const tdSelect = tr.querySelector('.td-select');
+    const controls = document.createElement('div');
+    controls.className = 'assoc-controls';
+    const select = document.createElement('select');
+    const optNone = document.createElement('option');
+    optNone.value = '';
+    optNone.textContent = '— Selecciona un material —';
+    select.appendChild(optNone);
+    const yaAsociados = current ? current.materiales.map(m=>m.codigo) : [];
+    materiales
+      .filter(m=> (m.cantSalida>0) || m.manual)
+      .filter(m=> !yaAsociados.includes(m.codigo))
+      .forEach(m=>{
+      const opt = document.createElement('option');
+      opt.value = m.codigo;
+      opt.textContent = m.codigo + ' · ' + (m.desc||'');
+      select.appendChild(opt);
+    });
+    controls.appendChild(select);
+
+    const assocBtn = document.createElement('button');
+    assocBtn.className = 'btn btn-primary btn-small';
+    assocBtn.textContent = 'Asociar';
+    assocBtn.onclick = ()=>{
+      const codigo = select.value;
+      if(!codigo){ alert('Selecciona un material de la lista para asociar.'); return; }
+      const mat = materiales.find(m=>m.codigo===codigo);
+      if(!asocMap[act.key]) asocMap[act.key] = { grupo: act.grupo, desc: act.desc, materiales: [] };
+      if(!asocMap[act.key].materiales.some(m=>m.codigo===codigo)){
+        asocMap[act.key].materiales.push({codigo, desc: mat ? mat.desc : ''});
+      }
+      saveState();
+      renderAll();
+    };
+    controls.appendChild(assocBtn);
+    tdSelect.appendChild(controls);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  box.appendChild(table);
+  panel.appendChild(box);
+
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.textContent = 'Cada actividad puede asociarse a varios materiales; el contador sube con cada material que agregues. Solo se listan para asociar los materiales del Cuadre con Cant. Salida mayor a 0 o marcados como "ADICIONAL". Marca "Asociación" para que una actividad sin material quede disponible en "+ Agregar actividad" dentro de ' + sh.label + '. Al asociar al menos un material, la actividad queda disponible automáticamente. En "+ Agregar actividad" cada actividad aparece una sola vez, independientemente de cuántas columnas/variantes tenga en el Excel original.';
+  panel.appendChild(note);
+}
+
+/* ---------- export CSV matching original column layout ---------- */
+function csvEscape(v){
+  v = (v===undefined||v===null) ? '' : String(v);
+  if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
+  return v;
+}
+
+function exportCSV(sh){
+  const st = STATE[sh.key];
+  if(st.vias.length===0){ alert('No hay vías para exportar en esta hoja.'); return; }
+  let rows = [];
+
+  if(sh.kind==='activities'){
+    const cat = CATALOG[sh.key];
+    const header1 = ['Descripción Vía', ...(sh.extraFields||[]).map(f=>f.label), ...cat.map(c=>`${c.grupo||''} - ${c.desc}`)];
+    const header2 = ['', ...(sh.extraFields||[]).map(()=>''), ...cat.map(c=> c.variant || '')];
+    const headerCol = ['(col.)', ...(sh.extraFields||[]).map(()=>''), ...cat.map(c=> c.col)];
+    rows.push(header1, header2, headerCol);
+    st.vias.forEach(via=>{
+      const row = [toProperCase(via.desc)||'', ...(sh.extraFields||[]).map(f=> toProperCase(via.extra[f.key])||'')];
+      cat.forEach(c=>{
+        const found = via.items.find(it=> it.col===c.col);
+        row.push(found ? found.qty : '');
+      });
+      rows.push(row);
+    });
+  } else if(sh.kind==='servicios'){
+    const header = ['Prestación (código)', 'Prestación (descripción)', 'Descripción Vía', ...sh.fields.map(f=>f.label), sh.totalLabel || 'Total'];
+    rows.push(header);
+    st.vias.forEach(via=>{
+      const row = [
+        via.servicio ? via.servicio.code : '',
+        via.servicio ? toProperCase(via.servicio.desc) : '',
+        toProperCase(via.desc)||'',
+        ...sh.fields.map(f=> (f.type==='text' ? toProperCase(via.fields[f.key])||'' : via.fields[f.key]||'')),
+        sh.totalFormula ? formatNum(sh.totalFormula(via.fields, via)) : ''
+      ];
+      rows.push(row);
+    });
+  } else {
+    const header = ['Descripción Vía', ...sh.fields.map(f=>f.label), ...(sh.totalFormula? [sh.totalLabel||'Total'] : [])];
+    rows.push(header);
+    st.vias.forEach(via=>{
+      const row = [toProperCase(via.desc)||'', ...sh.fields.map(f=> (f.type==='text' ? toProperCase(via.fields[f.key])||'' : via.fields[f.key]||'')), ...(sh.totalFormula? [formatNum(sh.totalFormula(via.fields, via))] : [])];
+      rows.push(row);
+    });
+  }
+
+  const csv = rows.map(r=> r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `liquidacion_${sh.key}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* Export "plano" (una fila por actividad+material) que conserva el Grupo, los campos
+   extra de la vía (N° de Plano, Ejecutora, Tipo de Armado, etc.) y la cantidad
+   ingresada tanto para la actividad como para cada material asociado. */
+function exportDetalleCSV(sh){
+  const st = STATE[sh.key];
+  if(st.vias.length===0){ alert('No hay vías para exportar en esta hoja.'); return; }
+  const extra = sh.extraFields||[];
+  const header = ['Vía / Descripción', ...extra.map(f=>f.label), 'Grupo', 'Columna', 'Código Actividad', 'Actividad', 'Cant. Actividad', 'Material Código', 'Material Descripción', 'Cant. Material'];
+  const rows = [header];
+
+  st.vias.forEach(via=>{
+    if(via.items.length===0) return;
+    via.items.forEach(it=>{
+      const materiales = it.materiales || (it.material ? [{...it.material, cantidad:''}] : []);
+      const ctx = itemContext(via, it);
+      const grupoVal = it.grupoLabel!==undefined ? it.grupoLabel : (via.grupoLabel||'');
+      const base = [toProperCase(ctx.desc)||'', ...extra.map(f=> toProperCase(ctx.extra[f.key])||''), toProperCase(grupoVal), it.col, it.code||'', toProperCase(it.desc), (it.qty===undefined||it.qty===null? '': it.qty)];
+      if(materiales.length===0){
+        rows.push([...base, '', '', '']);
+      } else {
+        materiales.forEach(m=>{
+          rows.push([...base, m.codigo||'', toProperCase(m.desc)||'', (m.cantidad===undefined||m.cantidad===null? '': m.cantidad)]);
+        });
+      }
+    });
+  });
+
+  const csv = rows.map(r=> r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `detalle_grupo_materiales_${sh.key}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* ============ Exportar PDF por ficha (detalle ejecutado, estilo Excel) ============ */
+
+// Añade página nueva si no queda espacio suficiente antes del pie de página.
+function pdfEnsureSpace(doc, y, needed){
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if(y + needed > pageHeight - 40){
+    doc.addPage();
+    return 50;
+  }
+  return y;
+}
+
+function pdfHeader(doc, sh){
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(13);
+  doc.setTextColor(10,39,53);
+  doc.text('COBRA PERÚ S.A.', 40, 42);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100,110,120);
+  doc.text('Ingreso de Liquidaciones · Redes MT/BT/AP', 40, 56);
+  doc.setDrawColor(210);
+  doc.line(40, 66, pageWidth-40, 66);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.setTextColor(10,39,53);
+  doc.text(sh.title, 40, 86);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(110,120,130);
+  const fecha = new Date().toLocaleDateString('es-PE', {year:'numeric', month:'long', day:'numeric'});
+  doc.text(`Ficha: ${sh.label}  ·  Generado: ${fecha}`, 40, 100);
+  return 122;
+}
+
+function pdfAddPageFooters(doc){
+  const pageCount = doc.internal.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(160,170,178);
+    doc.text(`Página ${i} de ${pageCount}`, pageWidth-90, pageHeight-20);
+  }
+}
+
+// Ficha kind:'activities' (MT/BT Subterránea, AP Aérea): una sola tabla por
+// vía —ordenada por Grupo (ej. Poste 01, Poste 02)— con columnas Grupo,
+// campos extra (Armado / N° de Plano / Ejecutora) y Actividad/Material,
+// usando en cada fila la foto de esos campos vigente cuando se agregó ESA
+// actividad (no el valor actual del encabezado de la vía), más el resumen
+// general al final, igual que "TOTAL GENERAL" del Excel.
+function pdfBuildActivities(doc, sh, y){
+  const st = STATE[sh.key];
+  // En los reportes PDF no se incluyen los campos "N° de Plano" ni "Ejecutora"
+  // (sí siguen disponibles para editar en pantalla y en las exportaciones CSV).
+  const extraFields = (sh.extraFields||[]).filter(f=> f.key!=='plano' && f.key!=='ejecutora');
+  const head = ['Grupo', ...extraFields.map(f=>f.label), 'Actividad', 'Cant.', 'Material seleccionado', 'Cant. Material'];
+
+  st.vias.forEach((via, idx)=>{
+    if(via.items.length===0) return;
+    y = pdfEnsureSpace(doc, y, 60);
+    if(via.desc){
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10);
+      doc.setTextColor(26,102,116);
+      doc.text(toProperCase(via.desc), 40, y);
+      y += 12;
+    }
+
+    // Ordena por Grupo manteniendo el orden de ingreso dentro de cada grupo.
+    const sorted = via.items.map((it,i)=> ({it,i})).sort((a,b)=>{
+      const la = (a.it.grupoLabel||'').trim(), lb = (b.it.grupoLabel||'').trim();
+      if(la===lb) return a.i-b.i;
+      return la.localeCompare(lb);
+    }).map(x=> x.it);
+
+    const body = [];
+    sorted.forEach(it=>{
+      const materiales = it.materiales || (it.material ? [{...it.material, cantidad:''}] : []);
+      const ctx = itemContext(via, it);
+      const grupoTxt = (it.grupoLabel && it.grupoLabel.trim()) ? toProperCase(it.grupoLabel.trim()) : '-';
+      const extraVals = extraFields.map(f=> toProperCase(ctx.extra[f.key]) || '-');
+      const qtyTxt = (it.qty===undefined||it.qty===null||it.qty==='') ? '-' : formatNum(num(it.qty));
+      const actTxt = it.code ? `${it.code} · ${toProperCase(it.desc)}` : toProperCase(it.desc);
+      if(materiales.length===0){
+        body.push([grupoTxt, ...extraVals, actTxt, qtyTxt, '—', '—']);
+      } else {
+        materiales.forEach((m, mi)=>{
+          body.push([
+            mi===0 ? grupoTxt : '',
+            ...extraVals.map(v=> mi===0 ? v : ''),
+            mi===0 ? actTxt : '',
+            mi===0 ? qtyTxt : '',
+            m.codigo ? `${m.codigo}${m.desc? ' · '+toProperCase(m.desc) : ''}` : '—',
+            (m.cantidad===undefined||m.cantidad===null||m.cantidad==='') ? '-' : formatNum(num(m.cantidad))
+          ]);
+        });
+      }
+    });
+
+    doc.autoTable({
+      startY: y+4,
+      head: [head],
+      body,
+      styles:{fontSize:6.2, cellPadding:2, textColor:[30,40,48], overflow:'linebreak'},
+      headStyles:{fillColor:[10,39,53], textColor:255, fontStyle:'bold', fontSize:6.4},
+      alternateRowStyles:{fillColor:[244,248,249]},
+      theme:'grid',
+      margin:{left:40, right:40},
+    });
+    y = doc.lastAutoTable.finalY + 18;
+  });
+
+  // Resumen general (equivalente a "TOTAL GENERAL")
+  const totals = {};
+  st.vias.forEach(via=> via.items.forEach(it=>{
+    const key = it.col;
+    if(!totals[key]) totals[key] = {grupo:it.grupo, code:it.code, desc:it.desc, variant:it.variant, qty:0};
+    totals[key].qty += Number(it.qty)||0;
+  }));
+  const rows = Object.values(totals).sort((a,b)=> (a.grupo||'').localeCompare(b.grupo||''));
+  if(rows.length){
+    y = pdfEnsureSpace(doc, y, 40);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(10,39,53);
+    doc.text('Resumen general (TOTAL GENERAL)', 40, y);
+    doc.autoTable({
+      startY: y+8,
+      head:[['Actividad','Material','Total']],
+      body: rows.map(r=> [r.code? `${r.code} · ${toProperCase(r.desc)}` : toProperCase(r.desc), toProperCase(r.variant)||'—', formatNum(r.qty)]),
+      styles:{fontSize:7, cellPadding:2.5, textColor:[30,40,48]},
+      headStyles:{fillColor:[255,65,77], textColor:255, fontStyle:'bold'},
+      theme:'grid',
+      margin:{left:40,right:40},
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+  return y;
+}
+
+// Ficha kind:'fields' (Embebido): una fila por vía con sus campos y el total
+// calculado, más fila TOTAL GENERAL y el resumen por código/actividad.
+function pdfBuildFields(doc, sh, y){
+  const st = STATE[sh.key];
+  // En los reportes PDF no se incluye el campo "N° de Plano" (sigue disponible
+  // para editar en pantalla y en las exportaciones CSV).
+  const fields = (sh.fields||[]).filter(f=> f.key!=='plano');
+  const head = ['Vía', ...fields.map(f=>f.label), sh.totalLabel||'Total'];
+  const fieldTxt = (f, via)=>{
+    const raw = via.fields[f.key];
+    if(f.type==='text') return toProperCase(raw) || '-';
+    return (raw===undefined||raw==='') ? '-' : formatNum(num(raw));
+  };
+  const body = st.vias.map((via, idx)=>{
+    const total = sh.totalFormula ? sh.totalFormula(via.fields, via) : 0;
+    return [toProperCase(via.desc) || '', ...fields.map(f=> fieldTxt(f, via)), formatNum(total)];
+  });
+  const totalGeneral = st.vias.reduce((acc,via)=> acc + (sh.totalFormula ? sh.totalFormula(via.fields, via) : 0), 0);
+  const totalRowIdx = body.length;
+  body.push(['TOTAL GENERAL', ...fields.map(()=>''), formatNum(totalGeneral)]);
+
+  doc.autoTable({
+    startY: y+4,
+    head:[head],
+    body,
+    styles:{fontSize:7.5, cellPadding:3, textColor:[30,40,48]},
+    headStyles:{fillColor:[10,39,53], textColor:255, fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[244,248,249]},
+    theme:'grid',
+    margin:{left:40,right:40},
+    didParseCell:(data)=>{
+      if(data.section==='body' && data.row.index===totalRowIdx){
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fillColor = [223,239,242];
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 18;
+
+  if(sh.summary){
+    y = pdfEnsureSpace(doc, y, 40);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(10,39,53);
+    doc.text('Resumen general (TOTAL GENERAL)', 40, y);
+    doc.autoTable({
+      startY: y+8,
+      head:[['Código','Actividad','Unidad','Total']],
+      body:[[sh.summary.code, toProperCase(sh.summary.desc), toProperCase(sh.summary.unidad)||'', formatNum(totalGeneral)]],
+      styles:{fontSize:8, cellPadding:3, textColor:[30,40,48]},
+      headStyles:{fillColor:[255,65,77], textColor:255, fontStyle:'bold'},
+      theme:'grid',
+      margin:{left:40,right:40},
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+  return y;
+}
+
+// Ficha kind:'servicios' (Resane): una tabla por prestación agregada (con IT,
+// vía, plano, ejecutor, largo, ancho, espesor, descontar y total m2, más su
+// fila TOTAL GENERAL), y al final el RESUMEN RESANE solo con lo añadido —
+// igual que el cuadro del Excel original.
+function pdfBuildServicios(doc, sh, y){
+  const st = STATE[sh.key];
+  const espesorField = sh.fields.find(f=> f.key==='espesor');
+
+  const groups = new Map();
+  st.vias.forEach(via=>{
+    if(!via.servicio) return;
+    const code = String(via.servicio.code);
+    if(!groups.has(code)) groups.set(code, { code: via.servicio.code, desc: via.servicio.desc, vias: [] });
+    groups.get(code).vias.push(via);
+  });
+
+  groups.forEach(g=>{
+    y = pdfEnsureSpace(doc, y, 60);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(26,102,116);
+    doc.text(`${g.code} — ${toProperCase(g.desc)}`, 40, y);
+
+    let totalGrupo = 0;
+    const body = g.vias.map((via, idx)=>{
+      const f = via.fields;
+      const total = sh.totalFormula(f, via) || 0;
+      totalGrupo += total;
+      const espesorDisabled = espesorField && espesorField.disabledWhen ? espesorField.disabledWhen(via) : false;
+      return [
+        idx+1,
+        toProperCase(via.desc) || '-',
+        f.largo!==undefined && f.largo!=='' ? formatNum(num(f.largo)) : '-',
+        f.ancho!==undefined && f.ancho!=='' ? formatNum(num(f.ancho)) : '-',
+        espesorDisabled ? 'N/A' : (f.espesor!==undefined && f.espesor!=='' ? formatNum(num(f.espesor)) : '-'),
+        f.descontar!==undefined && f.descontar!=='' ? formatNum(num(f.descontar)) : '-',
+        formatNum(total)
+      ];
+    });
+    const totalRowIdx = body.length;
+    body.push(['', '', '', '', '', 'TOTAL GENERAL', formatNum(totalGrupo)]);
+
+    doc.autoTable({
+      startY: y+8,
+      head:[['IT','Descripción vía','Largo (ml)','Ancho','Espesor','Descontar m2','Total M2']],
+      body,
+      styles:{fontSize:7, cellPadding:3, textColor:[30,40,48]},
+      headStyles:{fillColor:[10,39,53], textColor:255, fontStyle:'bold'},
+      alternateRowStyles:{fillColor:[244,248,249]},
+      theme:'grid',
+      margin:{left:40,right:40},
+      didParseCell:(data)=>{
+        if(data.section==='body' && data.row.index===totalRowIdx){
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [223,239,242];
+        }
+      }
+    });
+    y = doc.lastAutoTable.finalY + 18;
+  });
+
+  // RESUMEN RESANE — solo las prestaciones con detalles agregados
+  const resumenRows = [];
+  groups.forEach(g=>{
+    const total = g.vias.reduce((acc,via)=> acc + (sh.totalFormula(via.fields, via)||0), 0);
+    resumenRows.push([g.code, toProperCase(g.desc), formatNum(total)]);
+  });
+  if(resumenRows.length){
+    y = pdfEnsureSpace(doc, y, 40);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(10,39,53);
+    doc.text(`Resumen general (RESUMEN ${sh.label.toUpperCase()})`, 40, y);
+    doc.autoTable({
+      startY: y+8,
+      head:[['Prestación','Descripción','Total M2']],
+      body: resumenRows,
+      styles:{fontSize:8, cellPadding:3, textColor:[30,40,48]},
+      headStyles:{fillColor:[255,65,77], textColor:255, fontStyle:'bold'},
+      theme:'grid',
+      margin:{left:40,right:40},
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+  return y;
+}
+
+function exportPDF(sh){
+  const st = STATE[sh.key];
+  if(!st.vias.length){ alert('No hay datos registrados en esta ficha para generar el PDF.'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){ alert('No se pudo cargar el generador de PDF. Revisa tu conexión e intenta de nuevo.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  if(typeof doc.autoTable !== 'function'){ alert('No se pudo cargar el complemento de tablas del PDF (autoTable). Revisa tu conexión e intenta de nuevo.'); return; }
+  let y = pdfHeader(doc, sh);
+
+  if(sh.kind==='activities'){
+    y = pdfBuildActivities(doc, sh, y);
+  } else if(sh.kind==='fields'){
+    y = pdfBuildFields(doc, sh, y);
+  } else if(sh.kind==='servicios'){
+    y = pdfBuildServicios(doc, sh, y);
+  }
+
+  pdfAddPageFooters(doc);
+  doc.save(`${sh.key}_detalle_ejecutado_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+/* ============ Presupuesto (ODM) ============ */
+
+const HEADER_FIELDS = [
+  {key:'ODM Presupuestada', label:'TD / ODM'},
+  {key:'Contrato Número', label:'Contrato N°'},
+  {key:'Texto breve de ODM Presupuesto', label:'Descripción ODM'},
+  {key:'Emplazamiento', label:'Emplazamiento'},
+  {key:'Zona', label:'Zona'},
+  {key:'Nivel de Tensión', label:'Nivel de tensión'},
+  {key:'Inspector Pluz', label:'Inspector Pluz'},
+  {key:'Código Interno', label:'Código interno'},
+];
+
+function handlePresupuestoFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheetName = wb.SheetNames.includes('Data') ? 'Data' : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(rows.length===0){ alert('El archivo no tiene filas de datos.'); return; }
+
+      const servicios = [];
+      const materiales = [];
+      rows.forEach(r=>{
+        const codigo = String(r['Material']||'').trim();
+        if(!codigo) return;
+        const item = {
+          codigo,
+          desc: r['Texto del Material']||'',
+          cantPresupuestada: Number(r['Cantidad presupuestada'])||0,
+          unidad: r['Unidad medida base']||'',
+          precioUnit: Number(r['Precio Unitario'])||0,
+          precioTotal: Number(r['Precio'])||0,
+          cantEjecutada: '',
+        };
+        if(codigo.startsWith('2')) servicios.push(item);
+        else if(codigo.startsWith('1')) materiales.push(item);
+      });
+
+      if(servicios.length===0 && materiales.length===0){
+        alert('No se encontraron filas con código de Material que empiece en "1" o "2".');
+        return;
+      }
+
+      const first = rows[0];
+      const header = {};
+      HEADER_FIELDS.forEach(f=> header[f.key] = first[f.key]);
+
+      STATE.presupuesto = { header, servicios, materiales };
+      saveState();
+      renderAll();
+    }catch(err){
+      alert('No se pudo leer el archivo. Verifica que sea el export de SAP en formato .xlsx.\n\n'+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderPresupuestoPanel(){
+  const panel = presupuestoPanel;
+  panel.innerHTML = '';
+  const st = STATE.presupuesto;
+
+  const head = document.createElement('div');
+  head.className = 'panel-head';
+  head.innerHTML = `
+    <div>
+      <h2>Presupuesto de la ODM → Liquidación de Servicios y Materiales</h2>
+      <p>Importa el export de SAP (código de Material: "2..." = servicio, "1..." = material). De ahí se arma la liquidación: cantidad presupuestada vs. cantidad ejecutada.</p>
+    </div>
+    <div class="panel-actions">
+      ${st.header ? '<button class="btn btn-outline btn-small" id="btn-export-presu">⬇ Exportar liquidación CSV</button><button class="btn btn-danger btn-small" id="btn-clear-presu">✕ Quitar presupuesto</button>' : ''}
+    </div>`;
+  panel.appendChild(head);
+  if(st.header){
+    head.querySelector('#btn-export-presu').onclick = exportPresupuestoCSV;
+    head.querySelector('#btn-clear-presu').onclick = ()=>{
+      if(!confirm('¿Quitar el presupuesto importado?')) return;
+      STATE.presupuesto = emptyPresupuesto();
+      saveState(); renderAll();
+    };
+  }
+
+  const upload = document.createElement('div');
+  upload.className = 'upload-box';
+  upload.innerHTML = `
+    <p>📥 ${st.header ? 'Reemplazar con otro archivo de presupuesto (.xlsx)' : 'Arrastra o selecciona el export del presupuesto (.xlsx)'}</p>
+    <p class="hint">Debe tener la hoja "Data" con las columnas de SAP (Material, Texto del Material, Cantidad presupuestada, Precio...)</p>
+    <button class="btn btn-primary btn-small" id="btn-pick-file" style="margin-top:8px;">Elegir archivo</button>
+    <input type="file" id="presu-file" accept=".xlsx,.xls" />`;
+  panel.appendChild(upload);
+  const fileInput = upload.querySelector('#presu-file');
+  upload.querySelector('#btn-pick-file').onclick = ()=> fileInput.click();
+  fileInput.onchange = (e)=>{ if(e.target.files[0]) handlePresupuestoFile(e.target.files[0]); };
+  upload.ondragover = (e)=>{ e.preventDefault(); upload.style.background='rgba(26,166,183,.18)'; };
+  upload.ondragleave = ()=>{ upload.style.background='rgba(26,166,183,.08)'; };
+  upload.ondrop = (e)=>{
+    e.preventDefault(); upload.style.background='rgba(26,166,183,.08)';
+    if(e.dataTransfer.files[0]) handlePresupuestoFile(e.dataTransfer.files[0]);
+  };
+
+  if(!st.header){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'Aún no has importado un presupuesto. Sube el archivo para ver los servicios y materiales de la ODM.';
+    panel.appendChild(empty);
+    return;
+  }
+
+  const chips = document.createElement('div');
+  chips.className = 'header-chips';
+  HEADER_FIELDS.forEach(f=>{
+    const v = st.header[f.key];
+    if(v===undefined || v===null || v==='') return;
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.innerHTML = `${f.label}: <b>${v}</b>`;
+    chips.appendChild(c);
+  });
+  panel.appendChild(chips);
+
+  panel.appendChild(renderBudgetSection('Servicios', st.servicios, 'code-serv'));
+  panel.appendChild(renderBudgetSection('Materiales', st.materiales, 'code-mat'));
+
+  const totalPresu = [...st.servicios, ...st.materiales].reduce((a,i)=>a+i.precioTotal,0);
+  const totalEjec = [...st.servicios, ...st.materiales].reduce((a,i)=>a + (Number(i.cantEjecutada)||0) * i.precioUnit, 0);
+  const grand = document.createElement('div');
+  grand.className = 'grand-total';
+  grand.innerHTML = `
+    <span>Total presupuestado: <b>S/ ${totalPresu.toFixed(2)}</b></span>
+    <span>Total liquidado (ejecutado): <b>S/ ${totalEjec.toFixed(2)}</b></span>`;
+  panel.appendChild(grand);
+}
+
+function renderBudgetSection(title, items, codeClass){
+  const box = document.createElement('div');
+  box.className = 'budget-section';
+  if(items.length===0){
+    box.innerHTML = `<h3>${title} <span class="pill-count">0</span></h3><div class="mini-tag">Sin filas de este tipo en el archivo.</div>`;
+    return box;
+  }
+  box.innerHTML = `<h3>${title} <span class="pill-count">${items.length}</span></h3>`;
+  const table = document.createElement('table');
+  table.className = 'budget-table';
+  table.innerHTML = `<thead><tr>
+    <th>Código</th><th>Descripción</th><th>Unidad</th>
+    <th>Cant. Presup.</th><th>Precio Unit.</th><th>Importe Presup.</th>
+    <th>Cant. Ejecutada</th><th>Importe Ejecutado</th><th>Saldo</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  items.forEach(it=>{
+    const tr = document.createElement('tr');
+    const ejecutada = Number(it.cantEjecutada)||0;
+    const importeEjec = ejecutada * it.precioUnit;
+    const saldo = it.cantPresupuestada - ejecutada;
+    tr.innerHTML = `
+      <td class="${codeClass}">${it.codigo}</td>
+      <td>${it.desc}</td>
+      <td>${it.unidad}</td>
+      <td>${formatNum(it.cantPresupuestada)}</td>
+      <td>S/ ${it.precioUnit.toFixed(2)}</td>
+      <td>S/ ${it.precioTotal.toFixed(2)}</td>
+      <td><input type="number" step="any" placeholder="0" value="${it.cantEjecutada}"></td>
+      <td class="js-importe-ejec">S/ ${importeEjec.toFixed(2)}</td>
+      <td class="js-saldo ${saldo<0?'saldo-neg':'saldo-ok'}">${formatNum(saldo)}</td>`;
+    const qtyInput = tr.querySelector('input');
+    qtyInput.oninput = ()=>{
+      it.cantEjecutada = qtyInput.value;
+      saveState();
+      const ej = Number(it.cantEjecutada)||0;
+      tr.querySelector('.js-importe-ejec').textContent = 'S/ '+(ej*it.precioUnit).toFixed(2);
+      const s = it.cantPresupuestada - ej;
+      const sEl = tr.querySelector('.js-saldo');
+      sEl.textContent = formatNum(s);
+      sEl.className = 'js-saldo ' + (s<0?'saldo-neg':'saldo-ok');
+      updateBudgetSectionFooter(table, title, items);
+      updateGrandTotal();
+    };
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const tfoot = document.createElement('tfoot');
+  table.appendChild(tfoot);
+  updateBudgetSectionFooter(table, title, items);
+  box.appendChild(table);
+  return box;
+}
+
+function updateBudgetSectionFooter(table, title, items){
+  const totalPresu = items.reduce((a,i)=>a + Number(i.precioTotal || 0),0);
+  const totalEjec = items.reduce((a,i)=>a + (Number(i.cantEjecutada || 0) * Number(i.precioUnit || 0)),0);
+  const totalSaldo = items.reduce((a,i)=>a + (Number(i.cantPresupuestada || 0) - Number(i.cantEjecutada || 0)),0);
+  const tfoot = table.querySelector('tfoot');
+  if(!tfoot) return;
+  tfoot.innerHTML = `<tr><td colspan="5">Total ${title.toLowerCase()}</td><td>S/ ${totalPresu.toFixed(2)}</td><td></td><td>S/ ${totalEjec.toFixed(2)}</td><td class="${totalSaldo < 0 ? 'saldo-neg' : 'saldo-ok'}">${formatNum(totalSaldo)}</td></tr>`;
+}
+
+function updateGrandTotal(){
+  const st = STATE.presupuesto;
+  const totalPresu = [...st.servicios, ...st.materiales].reduce((a,i)=>a+i.precioTotal,0);
+  const totalEjec = [...st.servicios, ...st.materiales].reduce((a,i)=>a + (Number(i.cantEjecutada)||0) * i.precioUnit, 0);
+  const grand = presupuestoPanel.querySelector('.grand-total');
+  if(grand){
+    grand.innerHTML = `
+      <span>Total presupuestado: <b>S/ ${totalPresu.toFixed(2)}</b></span>
+      <span>Total liquidado (ejecutado): <b>S/ ${totalEjec.toFixed(2)}</b></span>`;
+  }
+}
+
+function exportPresupuestoCSV(){
+  const st = STATE.presupuesto;
+  const rows = [['Tipo','Código','Descripción','Unidad','Cant. Presupuestada','Precio Unitario','Importe Presupuestado','Cant. Ejecutada','Importe Ejecutado','Saldo']];
+  const addRows = (items, tipo)=>{
+    items.forEach(it=>{
+      const ej = Number(it.cantEjecutada)||0;
+      rows.push([tipo, it.codigo, it.desc, it.unidad, it.cantPresupuestada, it.precioUnit.toFixed(2), it.precioTotal.toFixed(2), ej, (ej*it.precioUnit).toFixed(2), it.cantPresupuestada-ej]);
+    });
+  };
+  addRows(st.servicios, 'Servicio');
+  addRows(st.materiales, 'Material');
+  const csv = rows.map(r=> r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const td = (st.header && st.header['ODM Presupuestada']) || 'odm';
+  a.download = `liquidacion_servicios_materiales_${td}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* ============ Cuadre Materiales (Salidas + Devoluciones vs Presupuesto) ============ */
+
+// Columnas relevantes de los reportes de Salidas / Devoluciones (export SAP)
+const MOV_FIELDS = {
+  salida:      { rubro:'Rubro', material:'Material', desc:'Descripcion del Material', unidad:'U.M.', cantidad:'Cantidad', guia:'Nro Guia', anulado:'Motivo de Anulacion',
+                 precio:['Precio Unitario','Precio','Valor Unitario','Valor Neto','Importe Unitario'] },
+  devolucion:  { rubro:'Rubro', material:'Material', desc:'Descripcion del Material', unidad:'U.M.', cantidad:'Cantidad', guia:'Guia Cobra', anulado:'Motivo de Anulacion' },
+};
+
+// Busca el primer valor numérico > 0 entre varias posibles columnas de precio (el nombre exacto varía según el export de SAP)
+function pickPrecio(r, candidates){
+  if(!candidates) return 0;
+  for(const key of candidates){
+    const v = Number(r[key]);
+    if(v) return v;
+  }
+  return 0;
+}
+
+function parseMovFile(file, tipo, onDone){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(rows.length===0){ alert('El archivo de '+(tipo==='salida'?'salidas':'devoluciones')+' no tiene filas de datos.'); return; }
+
+      const f = MOV_FIELDS[tipo];
+      const out = [];
+      rows.forEach(r=>{
+        const rubro = String(r[f.rubro]||'').trim().toUpperCase();
+        if(rubro!=='PLUZ') return; // excluye compras / otros almacenes (no-PLUZ)
+        const anulado = String(r[f.anulado]||'').trim();
+        if(anulado) return; // excluye guías anuladas
+        const material = String(r[f.material]||'').trim();
+        if(!material) return;
+        out.push({
+          material,
+          desc: r[f.desc]||'',
+          unidad: r[f.unidad]||'',
+          cantidad: Number(r[f.cantidad])||0,
+          guia: String(r[f.guia]||'').trim(),
+          precio: pickPrecio(r, f.precio),
+        });
+      });
+
+      if(out.length===0){
+        alert('El archivo de '+(tipo==='salida'?'salidas':'devoluciones')+' no tiene filas con Rubro = PLUZ (o todas fueron anuladas).');
+      }
+      onDone(out, file.name);
+    }catch(err){
+      alert('No se pudo leer el archivo de '+(tipo==='salida'?'salidas':'devoluciones')+'. Verifica el formato.\n\n'+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function handleMovFile(file, tipo){
+  parseMovFile(file, tipo, (rows, fileName)=>{
+    if(tipo==='salida'){
+      STATE.cuadre.salidaRows = rows;
+      STATE.cuadre.salidaFileName = fileName;
+    } else {
+      STATE.cuadre.devolucionRows = rows;
+      STATE.cuadre.devolucionFileName = fileName;
+    }
+    CUADRE_CACHE = null; // los saldos deben recalcularse en el servidor
+    saveState();
+    renderAll();
+  });
+}
+
+// Combina presupuesto + salidas(PLUZ) + devoluciones(PLUZ) en un único listado de materiales
+// ── A partir de aquí, el cuadre de materiales ya NO se calcula en el
+// navegador. `buildCuadreMateriales`, `computeAutoExecColumns`,
+// `totalEjecCodigo` y `getCantActual` ahora son simples lectores de
+// CUADRE_CACHE, que llena `refrescarCuadreDesdeServidor()` con lo que
+// devuelve Code.gs (ver acción "calcularCuadre"). El cliente sigue
+// guardando localmente las cantidades ejecutadas que el usuario escribe
+// (getEjec/setEjec) porque son datos crudos de entrada, no un resultado;
+// el resultado (saldo, cantidad actual, totales) siempre viene del server.
+function buildCuadreMateriales(){
+  return (CUADRE_CACHE && CUADRE_CACHE.materiales) || [];
+}
+
+/* --- Columnas dinámicas de ejecución (frentes) --- */
+function addCuadreColumn(){
+  const col = { id:uid(), name:'Frente '+(STATE.cuadre.columns.length+1) };
+  STATE.cuadre.columns.push(col);
+  STATE.cuadre.ejec[col.id] = {};
+  CUADRE_CACHE = null;
+  saveState();
+  renderAll();
+}
+function removeCuadreColumn(id){
+  if(!confirm('¿Quitar esta columna y las cantidades ejecutadas registradas en ella?')) return;
+  STATE.cuadre.columns = STATE.cuadre.columns.filter(c=>c.id!==id);
+  delete STATE.cuadre.ejec[id];
+  CUADRE_CACHE = null;
+  saveState();
+  renderAll();
+}
+function getEjec(colId, codigo){
+  const col = STATE.cuadre.ejec[colId];
+  return col ? (Number(col[codigo])||0) : 0;
+}
+function setEjec(colId, codigo, val){
+  if(!STATE.cuadre.ejec[colId]) STATE.cuadre.ejec[colId] = {};
+  STATE.cuadre.ejec[colId][codigo] = val;
+  saveState();
+}
+
+// Columnas automáticas (MT/BT/AP) y sus cantidades: ya vienen calculadas
+// del servidor dentro de CUADRE_CACHE. Esta función conserva el mismo
+// nombre y la misma forma de retorno { cols, qty } para no tener que tocar
+// el resto de renderCuadrePanel/updateCuadreFooter/exportCuadreCSV.
+function computeAutoExecColumns(){
+  if(!CUADRE_CACHE) return { cols:[], qty:{} };
+  return { cols: CUADRE_CACHE.autoColumns || [], qty: CUADRE_CACHE.autoQty || {} };
+}
+// Total ejecutado por código: el servidor ya lo calculó (manual + automático)
+// dentro de CUADRE_CACHE.materiales[].totalEjec; aquí solo lo leemos.
+function totalEjecCodigo(codigo){
+  if(!CUADRE_CACHE) return 0;
+  const m = (CUADRE_CACHE.materiales||[]).find(x=>x.codigo===codigo);
+  return m ? (m.totalEjec||0) : 0;
+}
+// Cant. Actual: idem, ya viene resuelta por el servidor (null si el
+// material no está presupuestado, igual que antes).
+function getCantActual(codigo){
+  if(!CUADRE_CACHE) return null;
+  const m = (CUADRE_CACHE.materiales||[]).find(x=>x.codigo===codigo);
+  return m ? m.cantActual : null;
+}
+
+/* --- Materiales adicionales (agregados manualmente) --- */
+function addExtraMaterial(codigo, desc, unidad, precio){
+  codigo = String(codigo||'').trim();
+  if(!codigo){ alert('Ingresa el código del material.'); return false; }
+  const existentes = buildCuadreMateriales();
+  if(existentes.some(m=>m.codigo===codigo)){
+    if(!confirm('Ya existe un material con el código "'+codigo+'". ¿Deseas actualizar su nombre/unidad/precio?')) return false;
+  }
+  STATE.cuadre.extraMateriales.push({
+    id:uid(), codigo, desc:String(desc||'').trim(), unidad:String(unidad||'').trim(), precioUnit:Number(precio)||0,
+  });
+  CUADRE_CACHE = null;
+  saveState();
+  renderAll();
+  return true;
+}
+function removeExtraMaterial(id){
+  if(!confirm('¿Quitar este material adicional?')) return;
+  STATE.cuadre.extraMateriales = STATE.cuadre.extraMateriales.filter(m=>m.id!==id);
+  CUADRE_CACHE = null;
+  saveState();
+  renderAll();
+}
+
+function renderCuadrePanel(){
+  const panel = cuadrePanel;
+  panel.innerHTML = '';
+  const cu = STATE.cuadre;
+
+  const head = document.createElement('div');
+  head.className = 'panel-head';
+  head.innerHTML = `
+    <div>
+      <h2>Cuadre de Materiales · Presupuesto vs. Salidas y Devoluciones</h2>
+      <p>Cruza los materiales presupuestados (ODM) con lo realmente retirado (Salidas) y lo devuelto (Devoluciones). Solo se consideran filas con Rubro = PLUZ (se excluyen las de compra directa) y guías no anuladas. Usa "+ Agregar columna" para registrar la cantidad ejecutada por frente/actividad; el importe (Precio × Cant. Ejecutada) se calcula al final.</p>
+    </div>
+    <div class="panel-actions">
+      <button class="btn btn-primary btn-small" id="btn-add-col">+ Agregar columna</button>
+      ${(STATE.presupuesto.materiales.length || cu.salidaRows.length || cu.devolucionRows.length) ? '<button class="btn btn-outline btn-small" id="btn-export-cuadre">⬇ Exportar cuadre CSV</button>' : ''}
+    </div>`;
+  panel.appendChild(head);
+  head.querySelector('#btn-add-col').onclick = addCuadreColumn;
+  if(head.querySelector('#btn-export-cuadre')){
+    head.querySelector('#btn-export-cuadre').onclick = exportCuadreCSV;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'upload-grid';
+  grid.innerHTML = `
+    <div class="upload-box compact" id="box-salida">
+      <div class="upload-top"><p><b>📤 Salidas</b> (.xls / .xlsx)</p></div>
+      <p class="${cu.salidaFileName?'file-ok':'file-empty'}">${cu.salidaFileName ? '✓ '+cu.salidaFileName+' ('+cu.salidaRows.length+' filas PLUZ)' : 'Sin archivo cargado'}</p>
+      <button class="btn btn-primary btn-small" id="btn-pick-salida">Elegir archivo</button>
+      ${cu.salidaFileName ? '<button class="btn btn-danger btn-small" id="btn-clear-salida">✕ Quitar salida</button>' : ''}
+      <input type="file" id="salida-file" accept=".xlsx,.xls" />
+    </div>
+    <div class="upload-box compact" id="box-devol">
+      <div class="upload-top"><p><b>↩ Devoluciones</b> (.xls / .xlsx) <span class="tag-optional">opcional</span></p></div>
+      <p class="${cu.devolucionFileName?'file-ok':'file-empty'}">${cu.devolucionFileName ? '✓ '+cu.devolucionFileName+' ('+cu.devolucionRows.length+' filas PLUZ)' : 'Sin archivo cargado — se trabaja sin devoluciones'}</p>
+      <button class="btn btn-primary btn-small" id="btn-pick-devol">Elegir archivo</button>
+      ${cu.devolucionFileName ? '<button class="btn btn-danger btn-small" id="btn-clear-devol">✕ Quitar devoluciones</button>' : ''}
+      <input type="file" id="devol-file" accept=".xlsx,.xls" />
+    </div>`;
+  panel.appendChild(grid);
+
+  const salidaInput = grid.querySelector('#salida-file');
+  grid.querySelector('#btn-pick-salida').onclick = ()=> salidaInput.click();
+  salidaInput.onchange = (e)=>{ if(e.target.files[0]) handleMovFile(e.target.files[0], 'salida'); };
+  const clearSalidaBtn = grid.querySelector('#btn-clear-salida');
+  if(clearSalidaBtn) clearSalidaBtn.onclick = ()=>{
+    if(!confirm('¿Quitar el archivo de salidas cargado?')) return;
+    STATE.cuadre.salidaRows = [];
+    STATE.cuadre.salidaFileName = null;
+    CUADRE_CACHE = null;
+    saveState(); renderAll();
+  };
+
+  const devolInput = grid.querySelector('#devol-file');
+  grid.querySelector('#btn-pick-devol').onclick = ()=> devolInput.click();
+  devolInput.onchange = (e)=>{ if(e.target.files[0]) handleMovFile(e.target.files[0], 'devolucion'); };
+  const clearDevolBtn = grid.querySelector('#btn-clear-devol');
+  if(clearDevolBtn) clearDevolBtn.onclick = ()=>{
+    if(!confirm('¿Quitar el archivo de devoluciones cargado?')) return;
+    STATE.cuadre.devolucionRows = [];
+    STATE.cuadre.devolucionFileName = null;
+    CUADRE_CACHE = null;
+    saveState(); renderAll();
+  };
+
+  if(STATE.presupuesto.materiales.length===0 && cu.salidaRows.length===0 && cu.devolucionRows.length===0 && cu.extraMateriales.length===0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'Importa primero el presupuesto (pestaña Presupuesto ODM) y/o el archivo de salidas para ver el cuadre de materiales. También puedes agregar un material adicional manualmente abajo.';
+    panel.appendChild(empty);
+    panel.appendChild(renderAddMaterialRow());
+    return;
+  }
+
+  // Los saldos y totales del cuadre viven en el servidor. Si no tenemos un
+  // cálculo fresco en caché, lo pedimos ahora: mostramos un estado de carga,
+  // y cuando llega la respuesta nos volvemos a invocar para pintar la tabla
+  // real. Nada de lo que se ve mientras tanto se calculó en el navegador.
+  if(!CUADRE_CACHE){
+    const loading = document.createElement('div');
+    loading.className = 'empty-state';
+    loading.textContent = 'Calculando saldos y totales en el servidor…';
+    panel.appendChild(loading);
+    refrescarCuadreDesdeServidor()
+      .then(()=> renderCuadrePanel())
+      .catch(err=>{
+        loading.textContent = 'No se pudo calcular el cuadre: ' + err.message;
+      });
+    return;
+  }
+
+  const materiales = buildCuadreMateriales();
+  const columns = STATE.cuadre.columns;
+  const { cols: autoColumns, qty: autoQty } = computeAutoExecColumns();
+
+  // Pre-pasada: si Cant. Actual quedó negativa para algún material, marcar
+  // "pendiente solicitud" en su Observación (sin duplicar si ya lo tenía).
+  let obsChanged = false;
+  materiales.forEach(m=>{
+    if(!m.presupuestado) return;
+    const cantActual = m.cantActual; // ya calculado por el servidor
+    if(cantActual < 0){
+      const cur = STATE.cuadre.observaciones[m.codigo] || '';
+      if(!cur.includes('pendiente solicitud')){
+        STATE.cuadre.observaciones[m.codigo] = cur.trim() ? (cur.trim()+' pendiente solicitud') : 'pendiente solicitud';
+        obsChanged = true;
+      }
+    }
+  });
+  // Material adicional (agregado manualmente): se concatena "ADICIONAL" al
+  // valor actual de Observación (una sola vez, con espacio), sin crear un campo aparte.
+  materiales.forEach(m=>{
+    if(!m.manual) return;
+    const cur = STATE.cuadre.observaciones[m.codigo] || '';
+    if(!cur.includes('ADICIONAL')){
+      STATE.cuadre.observaciones[m.codigo] = cur.trim() ? (cur.trim()+' ADICIONAL') : 'ADICIONAL';
+      obsChanged = true;
+    }
+  });
+  // Guías de devolución: se concatenan al valor actual de Observación
+  // (una sola vez, con espacio), sin crear un campo aparte.
+  materiales.forEach(m=>{
+    if(m.manual || !m.guiasDevol || !m.guiasDevol.length) return;
+    const guiaTxt = m.guiasDevol.join(', ');
+    const cur = STATE.cuadre.observaciones[m.codigo] || '';
+    if(!cur.includes(guiaTxt)){
+      STATE.cuadre.observaciones[m.codigo] = cur.trim() ? (cur.trim()+' '+guiaTxt) : guiaTxt;
+      obsChanged = true;
+    }
+  });
+  if(obsChanged) saveState();
+
+  const box = document.createElement('div');
+  box.className = 'budget-section';
+  box.innerHTML = `<h3>Materiales <span class="pill-count">${materiales.length}</span></h3>`;
+
+  const scrollWrap = document.createElement('div');
+  scrollWrap.className = 'cuadre-scroll';
+
+  const table = document.createElement('table');
+  table.className = 'matrix-table';
+
+  // ---- THEAD ----
+  const thead = document.createElement('thead');
+  const headTr = document.createElement('tr');
+  headTr.innerHTML = `
+    <th class="sticky-l1">Código</th>
+    <th class="sticky-l2">Material</th>
+    <th>Unidad</th>
+    <th>Precio Unit.</th>
+    <th>Cant. Presup.</th>
+    <th>Cant. Salida</th>
+    <th>Cant. Devol.</th>
+    <th>Observación</th>
+    <th>Saldo Neto</th>
+    <th>Cant. Actual</th>`;
+  autoColumns.forEach(col=>{
+    const th = document.createElement('th');
+    th.className = 'exec-col-th auto-col-th';
+    th.title = 'Columna automática: cantidad ingresada en la ficha ' + (col.tag||col.name);
+    th.innerHTML = `<div class="auto-col-name"><b>${col.name}</b><span>${col.tag||''}</span></div>`;
+    headTr.appendChild(th);
+  });
+  columns.forEach(col=>{
+    const th = document.createElement('th');
+    th.className = 'exec-col-th';
+    th.innerHTML = `
+      <div class="exec-col-head">
+        <div class="exec-col-name-row">
+          <input type="text" class="exec-col-name" value="${col.name}" placeholder="Nombre de columna">
+          <button class="exec-col-remove" title="Quitar columna">✕</button>
+        </div>
+      </div>`;
+    const nameInput = th.querySelector('.exec-col-name');
+    nameInput.oninput = ()=>{ col.name = nameInput.value; saveState(); };
+    th.querySelector('.exec-col-remove').onclick = ()=> removeCuadreColumn(col.id);
+    headTr.appendChild(th);
+  });
+  const thAddCol = document.createElement('th');
+  thAddCol.className = 'add-col-cell';
+  thAddCol.innerHTML = `<button class="btn btn-outline btn-small btn-add-col" id="th-add-col">+ Columna</button>`;
+  headTr.appendChild(thAddCol);
+  headTr.insertAdjacentHTML('beforeend', `
+    <th class="sticky-r2">Total Ejec.</th>
+    <th class="sticky-r1">Importe Ejec.</th>`);
+  thead.appendChild(headTr);
+  table.appendChild(thead);
+  thAddCol.querySelector('#th-add-col').onclick = addCuadreColumn;
+
+  // ---- TBODY ----
+  const tbody = document.createElement('tbody');
+  materiales.forEach(m=>{
+    const tr = document.createElement('tr');
+    if(!m.presupuestado) tr.className = 'row-extra';
+    const cellBg = m.presupuestado ? '#0a2735' : '#2c2b38';
+    const saldo = m.presupuestado ? m.saldo : null; // calculado por el servidor
+    const cantActual = m.presupuestado ? m.cantActual : null; // calculado por el servidor
+    tr.innerHTML = `
+      <td class="code-mat sticky-l1" style="background:${cellBg}">${m.codigo}</td>
+      <td class="sticky-l2" style="background:${cellBg}" title="${m.desc}">${m.desc}</td>
+      <td>${m.unidad}</td>
+      <td>S/ ${(m.precioUnit||0).toFixed(2)}</td>
+      <td>${m.presupuestado ? formatNum(m.cantPresupuestada) : '—'}</td>
+      <td>${formatNum(m.cantSalida || 0)}</td>
+      <td>${formatNum(m.cantDevolucion || 0)}</td>
+      <td></td>
+      <td class="${saldo<0?'saldo-neg':'saldo-ok'}">${m.presupuestado ? formatNum(saldo) : '—'}</td>
+      <td class="${cantActual===null?'':(cantActual<0?'cant-actual-neg':'cant-actual-ok')}">${cantActual===null ? '—' : formatNum(cantActual)}</td>`;
+
+    // Celda Observación: un único campo de texto editable (sin badges ni placeholder).
+    const tdObs = tr.children[7];
+    const obsWrap = document.createElement('div');
+    obsWrap.className = 'obs-cell';
+    const obsInput = document.createElement('input');
+    obsInput.type = 'text';
+    obsInput.className = 'obs-input';
+    obsInput.value = STATE.cuadre.observaciones[m.codigo] || '';
+    obsInput.oninput = ()=>{ STATE.cuadre.observaciones[m.codigo] = obsInput.value; saveState(); };
+    obsWrap.appendChild(obsInput);
+    if(m.manual){
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-x js-remove-extra';
+      removeBtn.title = 'Quitar material adicional';
+      removeBtn.textContent = '✕';
+      removeBtn.onclick = ()=> removeExtraMaterial(m.manualId);
+      obsWrap.appendChild(removeBtn);
+    }
+    tdObs.appendChild(obsWrap);
+
+    // Columnas automáticas MT / BT / (grupo-armado de AP Aérea): solo lectura.
+    autoColumns.forEach(col=>{
+      const td = document.createElement('td');
+      td.className = 'auto-col-td';
+      const v = (autoQty[col.id] && autoQty[col.id][m.codigo]) || 0;
+      td.textContent = formatNum(v);
+      tr.appendChild(td);
+    });
+
+    columns.forEach(col=>{
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = 'any';
+      input.placeholder = '0';
+      input.className = 'exec-qty-input';
+      const cur = getEjec(col.id, m.codigo);
+      input.value = cur || 0;
+      // La cantidad ejecutada que escribe el usuario es un dato crudo: se
+      // guarda localmente al vuelo (setEjec), pero el Total Ejecutado /
+      // Importe / Cant. Actual que dependen de ella NO se recalculan en el
+      // navegador. Al salir del campo (blur) se invalida la caché y se le
+      // pide al servidor el recálculo real antes de repintar la tabla.
+      input.oninput = ()=>{ setEjec(col.id, m.codigo, input.value); };
+      input.onblur = ()=>{ CUADRE_CACHE = null; renderAll(); };
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+
+    const tdAddCol = document.createElement('td');
+    tr.appendChild(tdAddCol);
+
+    const totalEjec = m.totalEjec || 0; // calculado por el servidor
+    const importeEjec = m.importe || 0; // calculado por el servidor
+    const tdTotal = document.createElement('td');
+    tdTotal.className = 'sticky-r2 js-total-ejec';
+    tdTotal.style.background = cellBg;
+    tdTotal.textContent = formatNum(totalEjec || 0);
+    const tdImporte = document.createElement('td');
+    tdImporte.className = 'sticky-r1 js-importe-ejec';
+    tdImporte.style.background = cellBg;
+    tdImporte.textContent = 'S/ ' + importeEjec.toFixed(2);
+    tr.appendChild(tdTotal);
+    tr.appendChild(tdImporte);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const tfoot = document.createElement('tfoot');
+  table.appendChild(tfoot);
+  updateCuadreFooter(tfoot, materiales, columns, autoColumns, autoQty);
+
+  scrollWrap.appendChild(table);
+  box.appendChild(scrollWrap);
+  box.appendChild(renderAddMaterialRow());
+  panel.appendChild(box);
+
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.textContent = 'Fila resaltada = material que aparece en Salidas/Devoluciones pero no estaba en el presupuesto importado. Usa "+ Columna" para agregar un frente/actividad y registrar la cantidad ejecutada de cada material; Código, Material, Total Ejecutado e Importe se mantienen visibles al desplazarte entre columnas.';
+  panel.appendChild(note);
+}
+
+function renderAddMaterialRow(){
+  const wrap = document.createElement('div');
+  wrap.className = 'add-material-row';
+  wrap.innerHTML = `
+    <div class="field f-codigo">
+      <label>Código</label>
+      <input type="text" id="new-mat-codigo" placeholder="Código">
+    </div>
+    <div class="field f-desc">
+      <label>Nombre del material</label>
+      <input type="text" id="new-mat-desc" placeholder="Descripción">
+    </div>
+    <div class="field f-unidad">
+      <label>Unidad</label>
+      <input type="text" id="new-mat-unidad" placeholder="UND">
+    </div>
+    <div class="field f-precio">
+      <label>Precio unitario</label>
+      <input type="number" step="any" id="new-mat-precio" placeholder="0.00">
+    </div>
+    <button class="btn btn-primary btn-small" id="btn-add-material">+ Agregar material adicional</button>`;
+  wrap.querySelector('#btn-add-material').onclick = ()=>{
+    const codigo = wrap.querySelector('#new-mat-codigo').value;
+    const desc = wrap.querySelector('#new-mat-desc').value;
+    const unidad = wrap.querySelector('#new-mat-unidad').value;
+    const precio = wrap.querySelector('#new-mat-precio').value;
+    const ok = addExtraMaterial(codigo, desc, unidad, precio);
+    if(ok===false) return;
+  };
+  return wrap;
+}
+
+function updateCuadreFooter(tfoot, materiales, columns, autoColumns, autoQty){
+  autoColumns = autoColumns || [];
+  autoQty = autoQty || {};
+  const totalPresu = materiales.reduce((a,m)=>a+(m.presupuestado?m.cantPresupuestada:0),0);
+  const totalSalida = materiales.reduce((a,m)=>a+m.cantSalida,0);
+  const totalDevol = materiales.reduce((a,m)=>a+m.cantDevolucion,0);
+  // Cant. Actual por fila viene del servidor (m.cantActual); aquí solo se suma.
+  const totalCantActual = materiales.reduce((a,m)=> a + (m.presupuestado ? (m.cantActual||0) : 0), 0);
+  let row = `<td class="sticky-l1" colspan="1">Total</td><td class="sticky-l2"></td><td></td><td></td>
+    <td>${formatNum(totalPresu)}</td><td>${formatNum(totalSalida)}</td><td>${formatNum(totalDevol)}</td><td></td><td></td>
+    <td class="${totalCantActual<0?'cant-actual-neg':''}">${formatNum(totalCantActual)}</td>`;
+  autoColumns.forEach(col=>{
+    const colTotal = materiales.reduce((a,m)=> a + ((autoQty[col.id] && autoQty[col.id][m.codigo]) || 0), 0);
+    row += `<td>${colTotal ? formatNum(colTotal) : ''}</td>`;
+  });
+  let totalImporteAll = 0;
+  columns.forEach(col=>{
+    const colTotal = materiales.reduce((a,m)=> a + getEjec(col.id, m.codigo), 0);
+    row += `<td>${colTotal ? formatNum(colTotal) : ''}</td>`;
+  });
+  row += `<td></td>`;
+  const totalEjecAll = materiales.reduce((a,m)=> a + (m.totalEjec||0), 0);
+  totalImporteAll = materiales.reduce((a,m)=> a + (m.importe||0), 0);
+  row += `<td class="sticky-r2">${formatNum(totalEjecAll || 0)}</td><td class="sticky-r1">S/ ${totalImporteAll.toFixed(2)}</td>`;
+  tfoot.innerHTML = `<tr>${row}</tr>`;
+}
+
+// El cuadre de materiales es un reporte "crítico" (decide saldos y montos
+// pendientes de rendición), así que el CSV ya no se arma con datos locales:
+// se le pide al servidor el texto final ya calculado con observaciones,
+// nombres de columna y totales incluidos (acción "exportarCuadreCSV").
+// El cliente solo dispara la descarga del archivo que recibe.
+async function exportCuadreCSV(){
+  const btn = document.getElementById('btn-export-cuadre');
+  const originalLabel = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando en el servidor…'; }
+  try{
+    const data = await llamarServidor('exportarCuadreCSV', {
+      payload: buildCuadrePayload(),
+      observaciones: STATE.cuadre.observaciones,
+    });
+    const blob = new Blob(['\ufeff'+data.csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = data.filename || 'cuadre_materiales.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }catch(err){
+    alert('No se pudo generar el CSV en el servidor: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+/* ---------- Arranque: exige licencia válida antes de tocar cualquier dato ---------- */
+const licenseGateEl = document.getElementById('license-gate');
+const licenseInputEl = document.getElementById('license-input');
+const licenseMsgEl = document.getElementById('license-msg');
+const licenseSubmitBtn = document.getElementById('license-submit');
+
+function showLicenseGate(msg, isError){
+  licenseGateEl.style.display = 'flex';
+  licenseMsgEl.textContent = msg || '';
+  licenseMsgEl.style.color = isError ? 'var(--accent3)' : 'var(--text-dim)';
+}
+function hideLicenseGate(){
+  licenseGateEl.style.display = 'none';
+}
+
+async function intentarValidarLicencia(key){
+  licenseSubmitBtn.disabled = true;
+  licenseMsgEl.style.color = 'var(--text-dim)';
+  licenseMsgEl.textContent = 'Validando…';
+  try{
+    const data = await llamarServidorConClave_('validateLicense', key);
+    if(!data.valid){
+      showLicenseGate(data.reason || 'Licencia inválida', true);
+      localStorage.removeItem(LICENSE_STORAGE_KEY);
+      return false;
+    }
+    LICENSE_KEY = key;
+    localStorage.setItem(LICENSE_STORAGE_KEY, key);
+    hideLicenseGate();
+    renderAll();
+    return true;
+  }catch(err){
+    showLicenseGate('No se pudo conectar con el servidor: ' + err.message, true);
+    return false;
+  }finally{
+    licenseSubmitBtn.disabled = false;
+  }
+}
+
+// Variante de llamarServidor que manda una clave explícita (no la global
+// LICENSE_KEY todavía) — se usa solo durante la validación inicial.
+async function llamarServidorConClave_(action, key){
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, secret: SHARED_SECRET, licenseKey: key, clientDomain: window.location.hostname })
+  });
+  return res.json();
+}
+
+licenseSubmitBtn.onclick = ()=>{
+  const key = licenseInputEl.value.trim();
+  if(!key){ showLicenseGate('Ingresa una clave de licencia.', true); return; }
+  intentarValidarLicencia(key);
+};
+licenseInputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') licenseSubmitBtn.click(); });
+
+function initApp(){
+  if(LICENSE_KEY){
+    // Ya había una clave guardada: la revalidamos en silencio contra el
+    // servidor antes de mostrar la app (pudo suspenderse o caducar mientras tanto).
+    showLicenseGate('Verificando licencia guardada…');
+    intentarValidarLicencia(LICENSE_KEY);
+  } else {
+    showLicenseGate('');
+  }
+}
+
+initApp();
+</script>
+</body>
+</html>
