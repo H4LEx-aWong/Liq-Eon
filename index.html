@@ -3696,6 +3696,10 @@ async function descargarPlantillaXLSX(sh){
       wsCat.addRow(['Actividad','Código Actividad','Rango']);
       actividades.forEach((a, i)=> wsCat.addRow([a.desc, a.code, rangoValido('ACT', i+1)]));
       const lastCatRow = actividades.length + 1;
+      // Excel NO permite usar una referencia directa a un rango de otra hoja como
+      // origen de una lista de validación de datos (por eso el desplegable de
+      // Actividad no dejaba elegir nada): hay que registrarlo como rango con nombre.
+      wb.definedNames.add(`CatalogoRef!$A$2:$A$${lastCatRow}`, 'ListaActividades');
 
       const wsMat = wb.addWorksheet('MaterialesRef');
       const wsMatCod = wb.addWorksheet('MaterialCodigoRef');
@@ -3726,7 +3730,7 @@ async function descargarPlantillaXLSX(sh){
 
         cellAct.dataValidation = {
           type:'list', allowBlank:true, showErrorMessage:true,
-          formulae:[`CatalogoRef!$A$2:$A$${lastCatRow}`],
+          formulae:['ListaActividades'],
           error:'Selecciona una actividad de la lista.', errorTitle:'Actividad inválida'
         };
         cellCod.value = { formula: `IF(${refAct}="","",IFERROR(VLOOKUP(${refAct},CatalogoRef!$A:$B,2,0),""))` };
@@ -3752,6 +3756,19 @@ async function descargarPlantillaXLSX(sh){
       wsMatCod.state = 'veryHidden';
     }
 
+    // Columnas internas/auxiliares ocultas (N° Ítem y Código Actividad, ya que este
+    // último se autocompleta solo). Anchos: Actividad y Material Descripción anchas
+    // (son las de texto largo con desplegable); Columna, Cant. Actividad, Material
+    // Código y Cant. Material angostas.
+    wsDet.getColumn(2).hidden = true; // N° Ítem
+    wsDet.getColumn(idxCodigoAct+1).hidden = true; // Código Actividad
+    wsDet.getColumn(idxActividad+1).width = 50;
+    wsDet.getColumn(idxMatDesc+1).width = 50;
+    wsDet.getColumn(idxColumna+1).width = 15;
+    wsDet.getColumn(idxCantAct+1).width = 15;
+    wsDet.getColumn(idxMatCodigo+1).width = 15;
+    wsDet.getColumn(idxCantMat+1).width = 15;
+
     await wsDet.protect(XLSX_PASSWORD, {
       selectLockedCells:true, selectUnlockedCells:true,
       formatCells:false, formatColumns:false, formatRows:false,
@@ -3775,9 +3792,10 @@ async function descargarPlantillaXLSX(sh){
     wsRef.state = 'veryHidden';
 
     const lastRef = sh.servicios.length + 1;
+    wb.definedNames.add(`'Prestaciones válidas'!$A$2:$A$${lastRef}`, 'ListaPrestaciones');
     const totalRows = Math.max(st.vias.length,1) + PLANTILLA_MAX_ROWS_EXTRA;
     for(let r=2; r<=totalRows+1; r++){
-      wsDet.getCell(r,2).dataValidation = { type:'list', allowBlank:true, formulae:[`'Prestaciones válidas'!$A$2:$A$${lastRef}`] };
+      wsDet.getCell(r,2).dataValidation = { type:'list', allowBlank:true, formulae:['ListaPrestaciones'] };
       for(let c=1;c<=header.length;c++) wsDet.getCell(r,c).protection = { locked:false };
     }
     await wsDet.protect(XLSX_PASSWORD, {
