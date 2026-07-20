@@ -561,6 +561,9 @@ table.budget-table td .mini-tag{font-style:italic;}
     </div>
   </div>
   <div class="top-actions">
+    <button class="btn btn-outline btn-small" onclick="descargarBackupJSON()">💾 Guardar backup (.json)</button>
+    <button class="btn btn-outline btn-small" onclick="document.getElementById('backup-json-input').click()">📂 Cargar backup (.json)</button>
+    <input type="file" id="backup-json-input" accept=".json" style="display:none" />
     <button class="btn btn-ghost btn-small" onclick="resetAll()">🗑 Borrar todo</button>
   </div>
 </header>
@@ -900,6 +903,49 @@ function loadState(){
 }
 function saveState(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+}
+
+// ---------- Backup / restauración completa en un solo archivo .json ----------
+// Permite respaldar TODO lo ingresado (presupuesto, cuadre, asociaciones, fichas
+// de servicio y las vías/ítems de cada ficha) y, más adelante, volver a cargarlo
+// en un HTML nuevo (misma app, en otro navegador/equipo, etc.), reemplazando lo
+// que hubiera en ese momento.
+function nombreBackupJSON_(){
+  return `backup_liquidaciones_${new Date().toISOString().slice(0,10)}.json`;
+}
+function descargarBackupJSON(){
+  const payload = { app:'cobra_liquidaciones', version:1, exportedAt: new Date().toISOString(), state: STATE };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreBackupJSON_();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 4000);
+}
+function cargarBackupJSON(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    let s;
+    try{
+      const parsed = JSON.parse(e.target.result);
+      // Admite tanto el formato con envoltorio ({state:...}) como un STATE "pelado".
+      s = (parsed && typeof parsed==='object' && parsed.state) ? parsed.state : parsed;
+      if(!s || typeof s !== 'object') throw new Error('El archivo no tiene el formato esperado.');
+    }catch(err){
+      alert('No se pudo leer el archivo de backup: ' + err.message);
+      return;
+    }
+    if(!confirm('¿Reemplazar todos los datos actuales (incluido el presupuesto importado) con los del archivo de backup? Esta acción no se puede deshacer.')) return;
+    // Se guarda tal cual en localStorage y se reutiliza loadState(), que ya sabe
+    // migrar formatos antiguos y completar cualquier campo faltante.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    STATE = loadState();
+    saveState();
+    renderAll();
+    alert('Backup cargado correctamente.');
+  };
+  reader.onerror = ()=> alert('No se pudo leer el archivo seleccionado.');
+  reader.readAsText(file);
 }
 function resetAll(){
   if(!confirm('¿Borrar todos los datos ingresados, incluido el presupuesto importado? Esta acción no se puede deshacer.')) return;
@@ -3803,6 +3849,11 @@ async function descargarPlantillaXLSX(sh){
     sh.servicios.forEach(s=> wsRef.addRow([s.code, s.desc]));
     wsRef.state = 'veryHidden';
 
+    // "Ancho" queda oculta (no se digita directamente en la plantilla); "Espesor"
+    // se deja visible ya que sí se necesita para el cálculo del Total M2.
+    const idxAnchoCol = header.indexOf('Ancho');
+    if(idxAnchoCol > -1) wsDet.getColumn(idxAnchoCol+1).hidden = true;
+
     const lastRef = sh.servicios.length + 1;
     wb.definedNames.add(`'Prestaciones válidas'!$A$2:$A$${lastRef}`, 'ListaPrestaciones');
     const totalRows = Math.max(st.vias.length,1) + PLANTILLA_MAX_ROWS_EXTRA;
@@ -4124,6 +4175,12 @@ function initApp(){
     showLicenseGate('');
   }
 }
+
+document.getElementById('backup-json-input').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(file) cargarBackupJSON(file);
+  e.target.value = ''; // permite volver a elegir el mismo archivo si hace falta
+});
 
 initApp();
 </script>
