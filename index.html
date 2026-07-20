@@ -3719,14 +3719,18 @@ async function descargarPlantillaXLSX(sh){
       });
 
       // ---- Encabezado + filas existentes ya cargadas: validación y fórmulas ----
+      const idxHelper = header.length; // columna auxiliar oculta al final: nombre de rango ya resuelto para INDIRECT
+      wsDet.getCell(1, idxHelper+1).value = '_rangoMat';
       const totalRows = Math.max(rows.length, 1) + PLANTILLA_MAX_ROWS_EXTRA;
       for(let r=2; r<=totalRows+1; r++){
         const cellAct = wsDet.getCell(r, idxActividad+1);
         const cellCod = wsDet.getCell(r, idxCodigoAct+1);
         const cellMatDesc = wsDet.getCell(r, idxMatDesc+1);
         const cellMatCod = wsDet.getCell(r, idxMatCodigo+1);
+        const cellHelper = wsDet.getCell(r, idxHelper+1);
         const refAct = `${L(idxActividad)}${r}`;
         const refMatDesc = `${L(idxMatDesc)}${r}`;
+        const refHelper = `${L(idxHelper)}${r}`;
 
         cellAct.dataValidation = {
           type:'list', allowBlank:true, showErrorMessage:true,
@@ -3736,9 +3740,16 @@ async function descargarPlantillaXLSX(sh){
         cellCod.value = { formula: `IF(${refAct}="","",IFERROR(VLOOKUP(${refAct},CatalogoRef!$A:$B,2,0),""))` };
         cellCod.protection = { locked:true };
 
+        // Columna auxiliar: resuelve a qué rango con nombre (ACT_n) corresponde la
+        // actividad de esta fila. Mantenerlo en una celda propia (en vez de anidar el
+        // VLOOKUP directo dentro del origen de la validación) es lo que hace que el
+        // desplegable dependiente funcione de forma confiable en Excel.
+        cellHelper.value = { formula: `IF(${refAct}="","",IFERROR(VLOOKUP(${refAct},CatalogoRef!$A:$C,3,0),""))` };
+        cellHelper.protection = { locked:true };
+
         cellMatDesc.dataValidation = {
           type:'list', allowBlank:true, showErrorMessage:true,
-          formulae:[`IF(${refAct}="","",IFERROR(INDIRECT(VLOOKUP(${refAct},CatalogoRef!$A:$C,3,0)),""))`],
+          formulae:[`IF(${refHelper}="","",INDIRECT(${refHelper}))`],
           error:'Selecciona un material asociado a la actividad elegida.', errorTitle:'Material inválido'
         };
         cellMatCod.value = { formula: `IF(OR(${refAct}="",${refMatDesc}=""),"",IFERROR(VLOOKUP(${refAct}&"|"&${refMatDesc},MaterialCodigoRef!$A:$B,2,0),""))` };
@@ -3754,6 +3765,7 @@ async function descargarPlantillaXLSX(sh){
       wsCat.state = 'veryHidden';
       wsMat.state = 'veryHidden';
       wsMatCod.state = 'veryHidden';
+      wsDet.getColumn(idxHelper+1).hidden = true;
     }
 
     // Columnas internas/auxiliares ocultas (N° Ítem y Código Actividad, ya que este
