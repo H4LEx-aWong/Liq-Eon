@@ -488,6 +488,14 @@ table.assoc-table tr:last-child td{border-bottom:none;}
   border:1px solid rgba(47,209,143,.3);border-radius:6px;padding:4px 8px;display:none;
 }
 .assoc-hint.show{display:block;}
+.servicio-assoc-card{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;
+}
+.servicio-assoc-card p{margin:0 0 12px;font-size:12.5px;color:var(--text-dim);max-width:640px;}
+.servicio-assoc-check{
+  display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;
+}
+.servicio-assoc-check input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
 
 .fields-grid-resane{grid-template-columns: 1.3fr 1.1fr 78px 78px 78px 92px 1fr;}
 .fields-grid-resane .field-plano,
@@ -777,6 +785,29 @@ function emptyAsociaciones(){
   SHEETS.filter(s=>s.kind==='activities').forEach(s=> a[s.key] = {});
   return a;
 }
+// Fichas de solo-servicio (Embebido, Resane, Acarreo): no tienen actividades/materiales
+// del Cuadre para asociar, así que en "Asociar Materiales" solo llevan un check
+// "Asociación" que las habilita como pestaña disponible.
+function emptyFichasServicio(){
+  const f = {};
+  SHEETS.filter(s=>s.kind!=='activities').forEach(s=> f[s.key] = { habilitada:false });
+  return f;
+}
+// Una ficha (pestaña de datos) solo se muestra en la navegación si fue "indicada" en
+// Asociar Materiales: para fichas de actividades, que al menos una actividad tenga
+// asociación (material o "Asociación" sin material); para fichas de servicio, que su
+// check "Asociación" esté marcado. Si la ficha ya tiene datos cargados (vías), se
+// muestra igual para no ocultar información ya ingresada.
+function isFichaHabilitada(sh){
+  const st = STATE[sh.key];
+  const tieneDatos = !!(st && st.vias && st.vias.length>0);
+  if(tieneDatos) return true;
+  if(sh.kind==='activities'){
+    const map = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
+    return Object.keys(map).length > 0;
+  }
+  return !!(STATE.fichasServicio && STATE.fichasServicio[sh.key] && STATE.fichasServicio[sh.key].habilitada);
+}
 // Clave que identifica una "actividad" única del catálogo (independiente de la variante/material y de la columna del Excel original)
 function activityKeyFor(it){
   return String(it.code) + '||' + it.desc;
@@ -833,6 +864,10 @@ function loadState(){
       if(!s.cuadre.observaciones) s.cuadre.observaciones = {};
       migrateSheetKeys(s);
       migrateAsociaciones(s);
+      if(!s.fichasServicio) s.fichasServicio = emptyFichasServicio();
+      SHEETS.filter(sh=>sh.kind!=='activities').forEach(sh=>{
+        if(!s.fichasServicio[sh.key]) s.fichasServicio[sh.key] = { habilitada:false };
+      });
       return s;
     }
   }catch(e){}
@@ -841,6 +876,7 @@ function loadState(){
   s.presupuesto = emptyPresupuesto();
   s.cuadre = emptyCuadre();
   s.asociaciones = emptyAsociaciones();
+  s.fichasServicio = emptyFichasServicio();
   return s;
 }
 function saveState(){
@@ -852,6 +888,7 @@ function resetAll(){
   STATE.presupuesto = emptyPresupuesto();
   STATE.cuadre = emptyCuadre();
   STATE.asociaciones = emptyAsociaciones();
+  STATE.fichasServicio = emptyFichasServicio();
   saveState();
   renderAll();
 }
@@ -914,7 +951,17 @@ SHEETS.forEach(sh=>{
 });
 
 function renderAll(){
-  [...tabsEl.children].forEach(b=> b.classList.toggle('active', b.dataset.key===activeTab));
+  // Si la ficha activa quedó oculta (no está "indicada"/habilitada en Asociar
+  // Materiales y tampoco tiene datos ya cargados), volvemos a esa pestaña.
+  const activeSheet = SHEETS.find(s=>s.key===activeTab);
+  if(activeSheet && !isFichaHabilitada(activeSheet)){
+    activeTab = 'asociar';
+  }
+  [...tabsEl.children].forEach(b=>{
+    const sh = SHEETS.find(s=>s.key===b.dataset.key);
+    if(sh) b.style.display = isFichaHabilitada(sh) ? '' : 'none';
+    b.classList.toggle('active', b.dataset.key===activeTab);
+  });
   presupuestoPanel.classList.toggle('active', activeTab==='presupuesto');
   cuadrePanel.classList.toggle('active', activeTab==='cuadre');
   asociarPanel.classList.toggle('active', activeTab==='asociar');
@@ -1619,32 +1666,71 @@ function renderServiciosSummary(sh){
 /* ---------- Asociar Materiales (vincula actividades embebidas de MT/BT/AP con materiales del Cuadre) ---------- */
 let asociarSheetKey = 'd1';
 
+// Fichas de servicio (Embebido, Resane, Acarreo): no tienen actividades ni materiales
+// del Cuadre para asociar. Solo llevan un check "Asociación" que las habilita como
+// pestaña disponible en la navegación.
+function renderAsociarFichaServicio(panel, sh){
+  if(!STATE.fichasServicio) STATE.fichasServicio = emptyFichasServicio();
+  if(!STATE.fichasServicio[sh.key]) STATE.fichasServicio[sh.key] = { habilitada:false };
+  const entry = STATE.fichasServicio[sh.key];
+
+  const box = document.createElement('div');
+  box.className = 'budget-section';
+  box.innerHTML = `<h3>${sh.title}</h3>`;
+
+  const card = document.createElement('div');
+  card.className = 'servicio-assoc-card';
+  card.innerHTML = `
+    <p>Esta ficha es un servicio (no tiene actividades/materiales del Cuadre para asociar). Marca "Asociación" para habilitarla y que aparezca como pestaña disponible en la navegación.</p>
+    <label class="servicio-assoc-check">
+      <input type="checkbox" id="chk-ficha-servicio" ${entry.habilitada ? 'checked' : ''}>
+      Asociación (habilitar ficha "${sh.label}")
+    </label>`;
+  box.appendChild(card);
+  panel.appendChild(box);
+
+  box.querySelector('#chk-ficha-servicio').onchange = (e)=>{
+    entry.habilitada = e.target.checked;
+    saveState();
+    renderAll();
+  };
+}
+
 function renderAsociarPanel(){
   const panel = asociarPanel;
   panel.innerHTML = '';
-  const activitySheets = SHEETS.filter(s=>s.kind==='activities');
+  // Todas las fichas de datos (actividades + servicios) se eligen aquí: una ficha
+  // solo aparece como pestaña de la app cuando queda "indicada"/habilitada en esta
+  // pantalla (ver isFichaHabilitada).
+  const allSheets = SHEETS;
 
   const head = document.createElement('div');
   head.className = 'panel-head';
   head.innerHTML = `
     <div>
       <h2>Asociar Materiales</h2>
-      <p>Selecciona la ficha (MT Subterránea, BT Subterránea o AP Aérea), elige una de sus actividades y asócíala a uno o más materiales de la ficha "Cuadre de Materiales". El contador indica con cuántos materiales quedó asociada cada actividad; solo las actividades con contador mayor a 0 aparecerán disponibles para agregar en su ficha correspondiente.</p>
+      <p>Selecciona una ficha y decide si se usa en este proyecto. Para MT/BT Subterránea, Acometidas y AP Aérea, elige una de sus actividades y asócíala a uno o más materiales de la ficha "Cuadre de Materiales" (o márcala "Asociación" si no lleva material). Para Embebido, Resane y Acarreo, que son solo servicios sin materiales del Cuadre, marca directamente "Asociación" para habilitarlas. Solo las fichas indicadas aquí aparecerán como pestaña disponible en la navegación.</p>
     </div>`;
   panel.appendChild(head);
 
   const selectRow = document.createElement('div');
   selectRow.className = 'sheet-select-row';
-  activitySheets.forEach(sh=>{
+  allSheets.forEach(sh=>{
     const b = document.createElement('button');
     b.className = 'sheet-select-btn' + (sh.key===asociarSheetKey ? ' active' : '');
-    b.textContent = sh.label;
+    b.textContent = sh.label + (isFichaHabilitada(sh) ? ' ✓' : '');
     b.onclick = ()=>{ asociarSheetKey = sh.key; renderAll(); };
     selectRow.appendChild(b);
   });
   panel.appendChild(selectRow);
 
-  const sh = activitySheets.find(s=>s.key===asociarSheetKey) || activitySheets[0];
+  const sh = allSheets.find(s=>s.key===asociarSheetKey) || allSheets[0];
+
+  if(sh.kind !== 'activities'){
+    renderAsociarFichaServicio(panel, sh);
+    return;
+  }
+
   const materiales = buildCuadreMateriales();
 
   if(materiales.length===0){
@@ -2617,11 +2703,15 @@ function renderCuadrePanel(){
     <div class="panel-actions">
       <button class="btn btn-primary btn-small" id="btn-add-col">+ Agregar columna</button>
       ${(STATE.presupuesto.materiales.length || cu.salidaRows.length || cu.devolucionRows.length) ? '<button class="btn btn-outline btn-small" id="btn-export-cuadre">⬇ Exportar cuadre CSV</button>' : ''}
+      ${(STATE.presupuesto.materiales.length || cu.salidaRows.length || cu.devolucionRows.length) ? '<button class="btn btn-outline btn-small" id="btn-pdf-cuadre">🖨 Generar PDF</button>' : ''}
     </div>`;
   panel.appendChild(head);
   head.querySelector('#btn-add-col').onclick = addCuadreColumn;
   if(head.querySelector('#btn-export-cuadre')){
     head.querySelector('#btn-export-cuadre').onclick = exportCuadreCSV;
+  }
+  if(head.querySelector('#btn-pdf-cuadre')){
+    head.querySelector('#btn-pdf-cuadre').onclick = generarCuadrePDF;
   }
 
   const grid = document.createElement('div');
@@ -2977,6 +3067,111 @@ async function exportCuadreCSV(){
     a.remove();
   }catch(err){
     alert('No se pudo generar el CSV en el servidor: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+// Genera el PDF del "Cuadre de Materiales" con la misma tabla que se ve en pantalla
+// (Código, Material, Presup./Salida/Devol./Saldo/Cant. Actual, columnas automáticas
+// y manuales de ejecución, Total Ejecutado e Importe), más una fila de totales.
+// Usa el mismo CUADRE_CACHE ya calculado por el servidor que pinta la tabla en pantalla.
+async function generarCuadrePDF(){
+  const btn = document.getElementById('btn-pdf-cuadre');
+  if(!window.jspdf || !window.jspdf.jsPDF){ alert('No se pudo cargar el generador de PDF. Revisa tu conexión e intenta de nuevo.'); return; }
+  if(!CUADRE_CACHE){ alert('Espera a que termine de calcularse el cuadre antes de generar el PDF.'); return; }
+  const materiales = buildCuadreMateriales();
+  if(!materiales.length){ alert('No hay materiales en el cuadre para generar el PDF.'); return; }
+
+  const originalLabel = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando PDF…'; }
+  try{
+    const columns = STATE.cuadre.columns || [];
+    const { cols: autoColumns, qty: autoQty } = computeAutoExecColumns();
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
+    if(typeof doc.autoTable !== 'function'){ alert('No se pudo cargar el complemento de tablas del PDF (autoTable). Revisa tu conexión e intenta de nuevo.'); return; }
+
+    const y = pdfHeader(doc, { title:'Cuadre de Materiales · Presupuesto vs. Salidas y Devoluciones', label:'Cuadre Materiales' });
+
+    const head = ['Código','Material','Unidad','Precio Unit.','Cant. Presup.','Cant. Salida','Cant. Devol.','Observación','Saldo Neto','Cant. Actual',
+      ...autoColumns.map(c=> c.name),
+      ...columns.map(c=> c.name),
+      'Total Ejec.','Importe Ejec.'];
+
+    const body = materiales.map(m=>{
+      const saldo = m.presupuestado ? m.saldo : null;
+      const cantActual = m.presupuestado ? m.cantActual : null;
+      const row = [
+        m.codigo,
+        toProperCase(m.desc),
+        m.unidad || '',
+        'S/ ' + (m.precioUnit||0).toFixed(2),
+        m.presupuestado ? formatNum(m.cantPresupuestada) : '—',
+        formatNum(m.cantSalida || 0),
+        formatNum(m.cantDevolucion || 0),
+        toProperCase(STATE.cuadre.observaciones[m.codigo] || '') || '',
+        m.presupuestado ? formatNum(saldo) : '—',
+        cantActual===null ? '—' : formatNum(cantActual),
+      ];
+      autoColumns.forEach(col=>{
+        const v = (autoQty[col.id] && autoQty[col.id][m.codigo]) || 0;
+        row.push(v ? formatNum(v) : '');
+      });
+      columns.forEach(col=>{
+        const v = getEjec(col.id, m.codigo);
+        row.push(v ? formatNum(v) : '');
+      });
+      row.push(formatNum(m.totalEjec || 0));
+      row.push('S/ ' + (m.importe || 0).toFixed(2));
+      return row;
+    });
+
+    const totalPresu = materiales.reduce((a,m)=>a+(m.presupuestado?m.cantPresupuestada:0),0);
+    const totalSalida = materiales.reduce((a,m)=>a+m.cantSalida,0);
+    const totalDevol = materiales.reduce((a,m)=>a+m.cantDevolucion,0);
+    const totalCantActual = materiales.reduce((a,m)=> a + (m.presupuestado ? (m.cantActual||0) : 0), 0);
+    const totalRow = ['TOTAL','','','',
+      formatNum(totalPresu), formatNum(totalSalida), formatNum(totalDevol), '', '',
+      formatNum(totalCantActual)];
+    autoColumns.forEach(col=>{
+      const colTotal = materiales.reduce((a,m)=> a + ((autoQty[col.id] && autoQty[col.id][m.codigo]) || 0), 0);
+      totalRow.push(colTotal ? formatNum(colTotal) : '');
+    });
+    columns.forEach(col=>{
+      const colTotal = materiales.reduce((a,m)=> a + getEjec(col.id, m.codigo), 0);
+      totalRow.push(colTotal ? formatNum(colTotal) : '');
+    });
+    const totalEjecAll = materiales.reduce((a,m)=> a + (m.totalEjec||0), 0);
+    const totalImporteAll = materiales.reduce((a,m)=> a + (m.importe||0), 0);
+    totalRow.push(formatNum(totalEjecAll));
+    totalRow.push('S/ ' + totalImporteAll.toFixed(2));
+
+    const totalRowIdx = body.length;
+    body.push(totalRow);
+
+    doc.autoTable({
+      startY: y+4,
+      head:[head],
+      body,
+      styles:{fontSize:6, cellPadding:2, textColor:[30,40,48], overflow:'linebreak'},
+      headStyles:{fillColor:[10,39,53], textColor:255, fontStyle:'bold', fontSize:6.2},
+      alternateRowStyles:{fillColor:[244,248,249]},
+      theme:'grid',
+      margin:{left:30,right:30},
+      didParseCell:(data)=>{
+        if(data.section==='body' && data.row.index===totalRowIdx){
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [223,239,242];
+        }
+      }
+    });
+
+    pdfAddPageFooters(doc);
+    doc.save(`cuadre_materiales_${new Date().toISOString().slice(0,10)}.pdf`);
+  }catch(err){
+    alert('No se pudo generar el PDF: ' + err.message);
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
   }
