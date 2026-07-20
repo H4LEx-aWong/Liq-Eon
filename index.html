@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>COBRA PERÚ · Ingreso de Liquidaciones</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3593,20 +3594,67 @@ function renderImportBanner(panel, shKey){
   IMPORT_RESULT = null;
 }
 
+// Convierte un índice de columna 1-based a letra de columna Excel (1->A, 27->AA, etc.)
+function colLetter(n){
+  let s = '';
+  while(n > 0){
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+// Nombre de rango válido para Excel (sin espacios/acentos/símbolos), usado para
+// las listas dependientes de materiales por actividad.
+function rangoValido(prefijo, idx){
+  return `${prefijo}_${idx}`;
+}
+function descargarNombreArchivo_(sh){
+  return `plantilla_${sh.key}_${new Date().toISOString().slice(0,10)}.xlsx`;
+}
+async function descargarBufferComoArchivo_(wb, filename){
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 4000);
+}
+
+const XLSX_PASSWORD = 'jalely';
+const PLANTILLA_MAX_ROWS_EXTRA = 300; // filas en blanco adicionales con validación/fórmulas, para seguir cargando datos
+
 // Arma y descarga la plantilla .xlsx de una ficha, con los datos actuales (si los
 // hay) ya volcados como punto de partida, o solo el encabezado + una fila de
-// ejemplo si la ficha está vacía. Para fichas de actividades incluye además una
-// hoja de referencia con el catálogo YA asociado (columna/código/materiales
-// válidos), para copiar y pegar sin errores.
-function descargarPlantillaXLSX(sh){
-  if(typeof XLSX === 'undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión e intenta de nuevo.'); return; }
+// ejemplo si la ficha está vacía.
+// Para fichas de actividades ('activities'), la columna "Actividad" se llena con
+// un desplegable (proveniente del catálogo habilitado en "Asociar Materiales");
+// al elegir una actividad, "Código Actividad" se autocompleta. "Material
+// Descripción" muestra solo los materiales asociados a la actividad elegida y,
+// al elegirlo, autocompleta "Material Código". Solo queda pendiente ingresar
+// las cantidades.
+// El libro se entrega con todas las hojas de apoyo ocultas (veryHidden) y el
+// libro/hoja protegidos con contraseña, de modo que solo se puedan ingresar
+// valores en las celdas habilitadas, sin poder revelar ni alterar la estructura.
+async function descargarPlantillaXLSX(sh){
+  if(typeof ExcelJS === 'undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión e intenta de nuevo.'); return; }
   const st = STATE[sh.key];
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.calcProperties.fullCalcOnLoad = true; // fuerza a Excel a recalcular las fórmulas al abrir
 
   if(sh.kind==='activities'){
     const extra = sh.extraFields||[];
     const header = ['N° Vía','N° Ítem','Vía / Descripción', ...extra.map(f=>f.label), 'Grupo','Columna','Código Actividad','Actividad','Cant. Actividad','Material Código','Material Descripción','Cant. Material'];
-    const rows = [header];
+
+    // Índices (0-based) de las columnas fijas, según el orden del encabezado
+    const E = extra.length;
+    const idxGrupo = 3+E, idxColumna = 3+E+1, idxCodigoAct = 3+E+2, idxActividad = 3+E+3,
+          idxCantAct = 3+E+4, idxMatCodigo = 3+E+5, idxMatDesc = 3+E+6, idxCantMat = 3+E+7;
+    const L = (idx)=> colLetter(idx+1);
+
+    // Filas de datos ya cargados, igual que antes
+    const rows = [];
     st.vias.forEach((via, vIdx)=>{
       if(via.items.length===0){
         rows.push([vIdx+1, '', via.desc||'', ...extra.map(f=> via.extra[f.key]||''), '', '', '', '', '', '', '', '']);
@@ -3624,54 +3672,149 @@ function descargarPlantillaXLSX(sh){
         }
       });
     });
-    if(st.vias.length===0){
-      rows.push([1, 1, 'Ej: Ca. Las Válvulas', ...extra.map(()=>''), 'Ej: 1132083', 'AC', '', '', 1, '', '', '']);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Detalle');
 
+    // Catálogo de actividades habilitadas (deduplicado), tal como se configuró en "Asociar Materiales"
     const asoc = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
-    const refHeader = ['Columna','Código Actividad','Grupo (categoría)','Descripción','Variante','Materiales asociados (código · descripción)'];
-    const refRows = [refHeader];
-    CATALOG[sh.key].forEach(it=>{
-      const key = activityKeyFor(it);
+    const actividades = Object.keys(asoc).map(key=>{
       const a = asoc[key];
       const habilitada = a && ((a.materiales && a.materiales.length>0) || a.sinMaterial===true);
-      if(!habilitada) return;
-      const mats = (a.materiales||[]).map(m=> `${m.codigo}${m.desc?' · '+m.desc:''}`).join(' | ');
-      refRows.push([it.col, it.code, it.grupo||'', it.desc, it.variant||'', mats || (a.sinMaterial ? '(sin material)' : '')]);
+      if(!habilitada) return null;
+      return { key, code: key.split('||')[0], desc: a.desc||'', materiales: a.materiales||[] };
+    }).filter(Boolean);
+
+    const wsDet = wb.addWorksheet('Detalle', { views:[{state:'frozen', ySplit:1}] });
+    wsDet.addRow(header);
+    wsDet.getRow(1).font = { bold:true };
+    rows.forEach(r=> wsDet.addRow(r));
+
+    if(actividades.length===0){
+      wsDet.addRow([1, 1, 'Ej: Ca. Las Válvulas', ...extra.map(()=>''), 'Ej: 1132083', 'AC', '', '', 1, '', '', '']);
+      alert('Aún no hay actividades habilitadas en "Asociar Materiales" para esta ficha. Se generará la plantilla sin desplegables; configúralas primero para tener el llenado guiado.');
+    } else {
+      // ---- Hojas de referencia (ocultas) que alimentan los desplegables y fórmulas ----
+      const wsCat = wb.addWorksheet('CatalogoRef');
+      wsCat.addRow(['Actividad','Código Actividad','Rango']);
+      actividades.forEach((a, i)=> wsCat.addRow([a.desc, a.code, rangoValido('ACT', i+1)]));
+      const lastCatRow = actividades.length + 1;
+
+      const wsMat = wb.addWorksheet('MaterialesRef');
+      const wsMatCod = wb.addWorksheet('MaterialCodigoRef');
+      wsMatCod.addRow(['Clave (Actividad|Material)','Material Código']);
+      actividades.forEach((a, i)=>{
+        const col = i+1;
+        wsMat.getCell(1, col).value = rangoValido('ACT', i+1);
+        const mats = a.materiales.length ? a.materiales : [];
+        mats.forEach((m, mi)=>{
+          wsMat.getCell(mi+2, col).value = m.desc || '';
+          wsMatCod.addRow([`${a.desc}|${m.desc||''}`, m.codigo||'']);
+        });
+        if(mats.length>0){
+          const colL = colLetter(col);
+          wb.definedNames.add(`MaterialesRef!$${colL}$2:$${colL}$${mats.length+1}`, rangoValido('ACT', i+1));
+        }
+      });
+
+      // ---- Encabezado + filas existentes ya cargadas: validación y fórmulas ----
+      const totalRows = Math.max(rows.length, 1) + PLANTILLA_MAX_ROWS_EXTRA;
+      for(let r=2; r<=totalRows+1; r++){
+        const cellAct = wsDet.getCell(r, idxActividad+1);
+        const cellCod = wsDet.getCell(r, idxCodigoAct+1);
+        const cellMatDesc = wsDet.getCell(r, idxMatDesc+1);
+        const cellMatCod = wsDet.getCell(r, idxMatCodigo+1);
+        const refAct = `${L(idxActividad)}${r}`;
+        const refMatDesc = `${L(idxMatDesc)}${r}`;
+
+        cellAct.dataValidation = {
+          type:'list', allowBlank:true, showErrorMessage:true,
+          formulae:[`CatalogoRef!$A$2:$A$${lastCatRow}`],
+          error:'Selecciona una actividad de la lista.', errorTitle:'Actividad inválida'
+        };
+        cellCod.value = { formula: `IF(${refAct}="","",IFERROR(VLOOKUP(${refAct},CatalogoRef!$A:$B,2,0),""))` };
+        cellCod.protection = { locked:true };
+
+        cellMatDesc.dataValidation = {
+          type:'list', allowBlank:true, showErrorMessage:true,
+          formulae:[`IF(${refAct}="","",IFERROR(INDIRECT(VLOOKUP(${refAct},CatalogoRef!$A:$C,3,0)),""))`],
+          error:'Selecciona un material asociado a la actividad elegida.', errorTitle:'Material inválido'
+        };
+        cellMatCod.value = { formula: `IF(OR(${refAct}="",${refMatDesc}=""),"",IFERROR(VLOOKUP(${refAct}&"|"&${refMatDesc},MaterialCodigoRef!$A:$B,2,0),""))` };
+        cellMatCod.protection = { locked:true };
+
+        // Deja desbloqueadas las demás columnas de la fila (datos manuales)
+        for(let c=1;c<=header.length;c++){
+          if(c===idxCodigoAct+1 || c===idxMatCodigo+1) continue;
+          wsDet.getCell(r, c).protection = { locked:false };
+        }
+      }
+
+      wsCat.state = 'veryHidden';
+      wsMat.state = 'veryHidden';
+      wsMatCod.state = 'veryHidden';
+    }
+
+    await wsDet.protect(XLSX_PASSWORD, {
+      selectLockedCells:true, selectUnlockedCells:true,
+      formatCells:false, formatColumns:false, formatRows:false,
+      insertColumns:false, insertRows:false, insertHyperlinks:false,
+      deleteColumns:false, deleteRows:false, sort:false, autoFilter:false, pivotTables:false
     });
-    const wsRef = XLSX.utils.aoa_to_sheet(refRows);
-    XLSX.utils.book_append_sheet(wb, wsRef, 'Catálogo habilitado');
   } else if(sh.kind==='servicios'){
     const header = ['N° Vía','Prestación (código)','Prestación (descripción)','Vía / Descripción', ...sh.fields.map(f=>f.label)];
-    const rows = [header];
+    const wsDet = wb.addWorksheet(sh.key, { views:[{state:'frozen', ySplit:1}] });
+    wsDet.addRow(header);
+    wsDet.getRow(1).font = { bold:true };
     st.vias.forEach((via, vIdx)=>{
-      rows.push([vIdx+1, via.servicio?via.servicio.code:'', via.servicio?via.servicio.desc:'', via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
+      wsDet.addRow([vIdx+1, via.servicio?via.servicio.code:'', via.servicio?via.servicio.desc:'', via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
     });
     if(st.vias.length===0){
-      rows.push([1, sh.servicios[0].code, sh.servicios[0].desc, '', ...sh.fields.map(()=>'')]);
+      wsDet.addRow([1, sh.servicios[0].code, sh.servicios[0].desc, '', ...sh.fields.map(()=>'')]);
     }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, sh.key);
+    const wsRef = wb.addWorksheet('Prestaciones válidas');
+    wsRef.addRow(['Código','Descripción']);
+    sh.servicios.forEach(s=> wsRef.addRow([s.code, s.desc]));
+    wsRef.state = 'veryHidden';
 
-    const refRows = [['Código','Descripción'], ...sh.servicios.map(s=>[s.code, s.desc])];
-    const wsRef = XLSX.utils.aoa_to_sheet(refRows);
-    XLSX.utils.book_append_sheet(wb, wsRef, 'Prestaciones válidas');
+    const lastRef = sh.servicios.length + 1;
+    const totalRows = Math.max(st.vias.length,1) + PLANTILLA_MAX_ROWS_EXTRA;
+    for(let r=2; r<=totalRows+1; r++){
+      wsDet.getCell(r,2).dataValidation = { type:'list', allowBlank:true, formulae:[`'Prestaciones válidas'!$A$2:$A$${lastRef}`] };
+      for(let c=1;c<=header.length;c++) wsDet.getCell(r,c).protection = { locked:false };
+    }
+    await wsDet.protect(XLSX_PASSWORD, {
+      selectLockedCells:true, selectUnlockedCells:true,
+      formatCells:false, formatColumns:false, formatRows:false,
+      insertColumns:false, insertRows:false, insertHyperlinks:false,
+      deleteColumns:false, deleteRows:false, sort:false, autoFilter:false, pivotTables:false
+    });
   } else {
     const header = ['N° Vía','Vía / Descripción', ...sh.fields.map(f=>f.label)];
-    const rows = [header];
+    const wsDet = wb.addWorksheet(sh.key, { views:[{state:'frozen', ySplit:1}] });
+    wsDet.addRow(header);
+    wsDet.getRow(1).font = { bold:true };
     st.vias.forEach((via, vIdx)=>{
-      rows.push([vIdx+1, via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
+      wsDet.addRow([vIdx+1, via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
     });
     if(st.vias.length===0){
-      rows.push([1, '', ...sh.fields.map(()=>'')]);
+      wsDet.addRow([1, '', ...sh.fields.map(()=>'')]);
     }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, sh.key);
+    const totalRows = Math.max(st.vias.length,1) + PLANTILLA_MAX_ROWS_EXTRA;
+    for(let r=2; r<=totalRows+1; r++){
+      for(let c=1;c<=header.length;c++) wsDet.getCell(r,c).protection = { locked:false };
+    }
+    await wsDet.protect(XLSX_PASSWORD, {
+      selectLockedCells:true, selectUnlockedCells:true,
+      formatCells:false, formatColumns:false, formatRows:false,
+      insertColumns:false, insertRows:false, insertHyperlinks:false,
+      deleteColumns:false, deleteRows:false, sort:false, autoFilter:false, pivotTables:false
+    });
   }
 
-  XLSX.writeFile(wb, `plantilla_${sh.key}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  // Intento de protección de estructura del libro (evita mostrar/agregar/eliminar hojas
+  // desde el menú de Excel). El ocultamiento "veryHidden" de las hojas de apoyo ya es la
+  // barrera principal, ya que ni siquiera aparecen en el diálogo "Mostrar hoja".
+  try{ wb.security = { lockStructure:true, password: XLSX_PASSWORD }; }catch(e){}
+
+  await descargarBufferComoArchivo_(wb, descargarNombreArchivo_(sh));
 }
 
 function cargarPlantillaXLSX(sh, file){
