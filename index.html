@@ -516,6 +516,16 @@ table.assoc-table tr:last-child td{border-bottom:none;}
 .panel-actions select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;}
 .panel-actions select:focus{outline:none;border-color:var(--accent);}
 table.budget-table td .mini-tag{font-style:italic;}
+
+/* ---- Plantilla XLSX (descarga/carga por ficha) ---- */
+.import-banner{border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12.5px;line-height:1.5;}
+.import-banner.ok{background:rgba(47,209,143,.10);border:1px solid rgba(47,209,143,.35);color:var(--text);}
+.import-banner.error{background:rgba(255,65,77,.10);border:1px solid rgba(255,65,77,.4);color:var(--text);}
+.import-banner-title{font-weight:700;margin-bottom:4px;}
+.import-banner.ok .import-banner-title{color:var(--ok);}
+.import-banner.error .import-banner-title{color:var(--accent3);}
+.import-banner ul{margin:6px 0 0;padding-left:18px;color:var(--text-dim);}
+.import-banner li{margin-bottom:3px;}
 </style>
 </head>
 <body>
@@ -1025,6 +1035,9 @@ function renderPanel(sh){
       <button class="btn btn-outline btn-small" data-act="export">⬇ Exportar CSV</button>
       ${sh.kind==='activities' ? '<button class="btn btn-outline btn-small" data-act="export-detalle">⬇ Exportar Detalle (Grupo/Materiales)</button>' : ''}
       <button class="btn btn-coral btn-small" data-act="export-pdf">📄 Generar PDF</button>
+      <button class="btn btn-outline btn-small" data-act="tpl-xlsx">⬇ Plantilla XLSX</button>
+      <button class="btn btn-outline btn-small" data-act="import-xlsx">⬆ Cargar XLSX</button>
+      <input type="file" data-act="import-xlsx-input" accept=".xlsx,.xls" style="display:none" />
       ${sh.kind!=='servicios' ? '<button class="btn btn-primary btn-small" data-act="add-via">+ Agregar vía</button>' : ''}
     </div>`;
   if(head.querySelector('[data-act="add-via"]')){
@@ -1035,7 +1048,17 @@ function renderPanel(sh){
   if(head.querySelector('[data-act="export-detalle"]')){
     head.querySelector('[data-act="export-detalle"]').onclick = ()=> exportDetalleCSV(sh);
   }
+  head.querySelector('[data-act="tpl-xlsx"]').onclick = ()=> descargarPlantillaXLSX(sh);
+  {
+    const impInput = head.querySelector('[data-act="import-xlsx-input"]');
+    head.querySelector('[data-act="import-xlsx"]').onclick = ()=> impInput.click();
+    impInput.onchange = (e)=>{
+      if(e.target.files[0]) cargarPlantillaXLSX(sh, e.target.files[0]);
+      e.target.value = '';
+    };
+  }
   panel.appendChild(head);
+  renderImportBanner(panel, sh.key);
 
   if(sh.kind==='servicios'){
     panel.appendChild(renderServicioSelector(sh));
@@ -3532,6 +3555,334 @@ function generarPreliqPDF(rows, contrato){
 
   pdfAddPageFooters(doc);
   doc.save(`preliquidacion_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+
+/* ============ Plantilla XLSX por ficha (descarga / carga con validación) ============
+   Para cualquier ficha habilitada desde "Asociar Materiales" (activities, fields o
+   servicios): descarga una plantilla .xlsx con el formato de detalle ya usado en
+   "Exportar Detalle" (una fila por actividad+material, con N° Vía / N° Ítem para
+   poder reconstruir la agrupación sin ambigüedad), y permite luego volver a cargarla.
+   Al cargar: se valida que cada actividad/columna exista en el catálogo Y esté
+   asociada a un material (o marcada "Asociación") en "Asociar Materiales", y que
+   cada material indicado sea uno de los vinculados a esa actividad. Si algo no
+   coincide, se muestra un mensaje pidiendo revisar los datos y NO se toca la ficha.
+   Si todo coincide, se muestra un mensaje de aprobación y se reemplazan los datos
+   actuales de la ficha por los del archivo. ============ */
+
+let IMPORT_RESULT = null; // {shKey, ok, title, messages[]} — se muestra una sola vez en el panel de esa ficha.
+
+function renderImportBanner(panel, shKey){
+  if(!IMPORT_RESULT || IMPORT_RESULT.shKey!==shKey) return;
+  const box = document.createElement('div');
+  box.className = 'import-banner ' + (IMPORT_RESULT.ok ? 'ok' : 'error');
+  const title = document.createElement('div');
+  title.className = 'import-banner-title';
+  title.textContent = (IMPORT_RESULT.ok ? '✅ ' : '⚠ ') + IMPORT_RESULT.title;
+  box.appendChild(title);
+  if(IMPORT_RESULT.messages && IMPORT_RESULT.messages.length){
+    const ul = document.createElement('ul');
+    IMPORT_RESULT.messages.forEach(m=>{
+      const li = document.createElement('li');
+      li.textContent = m;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  panel.appendChild(box);
+  IMPORT_RESULT = null;
+}
+
+// Arma y descarga la plantilla .xlsx de una ficha, con los datos actuales (si los
+// hay) ya volcados como punto de partida, o solo el encabezado + una fila de
+// ejemplo si la ficha está vacía. Para fichas de actividades incluye además una
+// hoja de referencia con el catálogo YA asociado (columna/código/materiales
+// válidos), para copiar y pegar sin errores.
+function descargarPlantillaXLSX(sh){
+  if(typeof XLSX === 'undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión e intenta de nuevo.'); return; }
+  const st = STATE[sh.key];
+  const wb = XLSX.utils.book_new();
+
+  if(sh.kind==='activities'){
+    const extra = sh.extraFields||[];
+    const header = ['N° Vía','N° Ítem','Vía / Descripción', ...extra.map(f=>f.label), 'Grupo','Columna','Código Actividad','Actividad','Cant. Actividad','Material Código','Material Descripción','Cant. Material'];
+    const rows = [header];
+    st.vias.forEach((via, vIdx)=>{
+      if(via.items.length===0){
+        rows.push([vIdx+1, '', via.desc||'', ...extra.map(f=> via.extra[f.key]||''), '', '', '', '', '', '', '', '']);
+        return;
+      }
+      via.items.forEach((it, itemIdx)=>{
+        const materiales = it.materiales || [];
+        const ctx = itemContext(via, it);
+        const grupoVal = it.grupoLabel!==undefined ? it.grupoLabel : (via.grupoLabel||'');
+        const base = [vIdx+1, itemIdx+1, ctx.desc||'', ...extra.map(f=> ctx.extra[f.key]||''), grupoVal||'', it.col, it.code||'', it.desc||'', (it.qty===undefined||it.qty===null?'':it.qty)];
+        if(materiales.length===0){
+          rows.push([...base, '', '', '']);
+        } else {
+          materiales.forEach(m=> rows.push([...base, m.codigo||'', m.desc||'', (m.cantidad===undefined||m.cantidad===null?'':m.cantidad)]));
+        }
+      });
+    });
+    if(st.vias.length===0){
+      rows.push([1, 1, 'Ej: Ca. Las Válvulas', ...extra.map(()=>''), 'Ej: 1132083', 'AC', '', '', 1, '', '', '']);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle');
+
+    const asoc = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
+    const refHeader = ['Columna','Código Actividad','Grupo (categoría)','Descripción','Variante','Materiales asociados (código · descripción)'];
+    const refRows = [refHeader];
+    CATALOG[sh.key].forEach(it=>{
+      const key = activityKeyFor(it);
+      const a = asoc[key];
+      const habilitada = a && ((a.materiales && a.materiales.length>0) || a.sinMaterial===true);
+      if(!habilitada) return;
+      const mats = (a.materiales||[]).map(m=> `${m.codigo}${m.desc?' · '+m.desc:''}`).join(' | ');
+      refRows.push([it.col, it.code, it.grupo||'', it.desc, it.variant||'', mats || (a.sinMaterial ? '(sin material)' : '')]);
+    });
+    const wsRef = XLSX.utils.aoa_to_sheet(refRows);
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Catálogo habilitado');
+  } else if(sh.kind==='servicios'){
+    const header = ['N° Vía','Prestación (código)','Prestación (descripción)','Vía / Descripción', ...sh.fields.map(f=>f.label)];
+    const rows = [header];
+    st.vias.forEach((via, vIdx)=>{
+      rows.push([vIdx+1, via.servicio?via.servicio.code:'', via.servicio?via.servicio.desc:'', via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
+    });
+    if(st.vias.length===0){
+      rows.push([1, sh.servicios[0].code, sh.servicios[0].desc, '', ...sh.fields.map(()=>'')]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, sh.key);
+
+    const refRows = [['Código','Descripción'], ...sh.servicios.map(s=>[s.code, s.desc])];
+    const wsRef = XLSX.utils.aoa_to_sheet(refRows);
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Prestaciones válidas');
+  } else {
+    const header = ['N° Vía','Vía / Descripción', ...sh.fields.map(f=>f.label)];
+    const rows = [header];
+    st.vias.forEach((via, vIdx)=>{
+      rows.push([vIdx+1, via.desc||'', ...sh.fields.map(f=> via.fields[f.key] ?? '')]);
+    });
+    if(st.vias.length===0){
+      rows.push([1, '', ...sh.fields.map(()=>'')]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, sh.key);
+  }
+
+  XLSX.writeFile(wb, `plantilla_${sh.key}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function cargarPlantillaXLSX(sh, file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      let sheetName = wb.SheetNames[0];
+      if(sh.kind==='activities' && wb.SheetNames.includes('Detalle')) sheetName = 'Detalle';
+      else if(wb.SheetNames.includes(sh.key)) sheetName = sh.key;
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(rows.length===0){
+        IMPORT_RESULT = { shKey: sh.key, ok:false, title:'El archivo no tiene filas de datos.', messages:[] };
+        renderAll();
+        return;
+      }
+      if(sh.kind==='activities') procesarImportActivities(sh, rows);
+      else if(sh.kind==='servicios') procesarImportServicios(sh, rows);
+      else procesarImportFields(sh, rows);
+    }catch(err){
+      IMPORT_RESULT = { shKey: sh.key, ok:false, title:'No se pudo leer el archivo. Verifica que sea el .xlsx de la plantilla (o su formato).', messages:[err.message] };
+      renderAll();
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Ficha kind:'activities' (MT/BT Subterránea, Redes Aéreas MT, Acometidas, AP Aérea):
+// valida cada fila contra el catálogo Y contra lo asociado en "Asociar Materiales"
+// antes de tocar nada. Agrupa por N° Vía + N° Ítem para reconstruir vías/actividades
+// sin ambigüedad (una actividad puede repetirse en distintos ítems de una misma vía).
+function procesarImportActivities(sh, rows){
+  const cat = CATALOG[sh.key];
+  const catByCol = {};
+  cat.forEach(c=> catByCol[c.col] = c);
+  const asoc = (STATE.asociaciones && STATE.asociaciones[sh.key]) || {};
+  const extra = sh.extraFields||[];
+  const errors = [];
+  const viaOrder = [];
+  const viaGroups = {};
+
+  rows.forEach((r, i)=>{
+    const rowNum = i+2;
+    const viaNum = String(r['N° Vía']===undefined ? '' : r['N° Vía']).trim();
+    const columna = String(r['Columna']||'').trim();
+    const descVia = r['Vía / Descripción']||'';
+    if(!viaNum){
+      if(columna || descVia) errors.push(`Fila ${rowNum}: falta "N° Vía".`);
+      return;
+    }
+    if(!viaGroups[viaNum]){
+      viaGroups[viaNum] = { desc: descVia, extra: {}, itemsMap: new Map(), itemOrder: [] };
+      viaOrder.push(viaNum);
+    }
+    const grp = viaGroups[viaNum];
+    if(!grp.desc) grp.desc = descVia;
+    extra.forEach(f=>{
+      const v = r[f.label];
+      if(v!==undefined && v!=='' && !grp.extra[f.key]) grp.extra[f.key] = v;
+    });
+    if(!columna) return; // fila de vía sin actividad (vía vacía o de referencia)
+
+    const catItem = catByCol[columna];
+    if(!catItem){
+      errors.push(`Fila ${rowNum}: la Columna "${columna}" no existe en el catálogo de "${sh.label}".`);
+      return;
+    }
+    const key = activityKeyFor(catItem);
+    const a = asoc[key];
+    const habilitada = a && ((a.materiales && a.materiales.length>0) || a.sinMaterial===true);
+    if(!habilitada){
+      errors.push(`Fila ${rowNum}: "${catItem.desc}" [${columna}] no está asociada a un material (ni marcada "Asociación") en "Asociar Materiales".`);
+      return;
+    }
+    const matCodigo = String(r['Material Código']||'').trim();
+    if(matCodigo){
+      const materialesLinked = a.materiales || [];
+      if(!materialesLinked.some(m=> String(m.codigo)===matCodigo)){
+        errors.push(`Fila ${rowNum}: el material "${matCodigo}" no está asociado a la actividad "${catItem.desc}" [${columna}] en "Asociar Materiales".`);
+        return;
+      }
+    }
+
+    const itemNum = String(r['N° Ítem']===undefined || r['N° Ítem']==='' ? '1' : r['N° Ítem']).trim();
+    const itemKey = viaNum + '||' + itemNum;
+    if(!grp.itemsMap.has(itemKey)){
+      const qtyRaw = r['Cant. Actividad'];
+      grp.itemsMap.set(itemKey, {
+        ...catItem,
+        uid: uid(),
+        qty: (qtyRaw===undefined || qtyRaw==='') ? '' : Number(qtyRaw),
+        grupoLabel: r['Grupo']||'',
+        materiales: [],
+      });
+      grp.itemOrder.push(itemKey);
+    }
+    const item = grp.itemsMap.get(itemKey);
+    if(matCodigo){
+      const cantRaw = r['Cant. Material'];
+      item.materiales.push({ codigo: matCodigo, desc: r['Material Descripción']||'', cantidad: (cantRaw===undefined||cantRaw==='') ? '' : Number(cantRaw) });
+    }
+  });
+
+  if(errors.length){
+    IMPORT_RESULT = {
+      shKey: sh.key, ok:false,
+      title: `No se pudo importar: revisa ${errors.length} dato(s) en el archivo antes de volver a intentarlo.`,
+      messages: errors.slice(0,15).concat(errors.length>15 ? [`… y ${errors.length-15} más.`] : [])
+    };
+    renderAll();
+    return;
+  }
+
+  const nuevasVias = viaOrder.map(viaNum=>{
+    const g = viaGroups[viaNum];
+    const viaExtra = {...g.extra};
+    const items = g.itemOrder.map(k=>{
+      const it = g.itemsMap.get(k);
+      it.viaSnap = { desc: g.desc||'', extra: {...viaExtra} };
+      return it;
+    });
+    return { id: uid(), desc: g.desc||'', extra: viaExtra, items, fields:{}, grupoLabel:'' };
+  });
+
+  STATE[sh.key].vias = nuevasVias;
+  saveState();
+  IMPORT_RESULT = {
+    shKey: sh.key, ok:true,
+    title: `Se cargaron ${nuevasVias.length} vía(s) con ${nuevasVias.reduce((a,v)=>a+v.items.length,0)} actividad(es) desde el archivo, reemplazando los datos anteriores de esta ficha.`,
+    messages: []
+  };
+  renderAll();
+}
+
+// Ficha kind:'fields' (Embebido, Acarreo): valida que los campos numéricos
+// realmente lo sean antes de reemplazar los datos de la ficha.
+function procesarImportFields(sh, rows){
+  const errors = [];
+  const built = [];
+  rows.forEach((r, i)=>{
+    const rowNum = i+2;
+    const desc = r['Vía / Descripción']||'';
+    const fields = {};
+    let hasAny = false;
+    let rowOk = true;
+    (sh.fields||[]).forEach(f=>{
+      const raw = r[f.label];
+      if(raw===undefined || raw==='') return;
+      hasAny = true;
+      if(f.type!=='text'){
+        const n = Number(raw);
+        if(isNaN(n)){ errors.push(`Fila ${rowNum}: el campo "${f.label}" debe ser numérico (se recibió "${raw}").`); rowOk=false; return; }
+        fields[f.key] = n;
+      } else {
+        fields[f.key] = raw;
+      }
+    });
+    if(!desc && !hasAny) return;
+    if(rowOk) built.push({ id: uid(), desc, extra:{}, items:[], fields });
+  });
+  if(errors.length){
+    IMPORT_RESULT = { shKey: sh.key, ok:false, title:`No se pudo importar: revisa ${errors.length} dato(s) en el archivo antes de volver a intentarlo.`, messages: errors.slice(0,15) };
+    renderAll();
+    return;
+  }
+  STATE[sh.key].vias = built;
+  saveState();
+  IMPORT_RESULT = { shKey: sh.key, ok:true, title:`Se cargaron ${built.length} vía(s) desde el archivo, reemplazando los datos anteriores de esta ficha.`, messages: [] };
+  renderAll();
+}
+
+// Ficha kind:'servicios' (Resane): cada fila debe traer un código de prestación
+// válido (de sh.servicios) además de campos numéricos correctos.
+function procesarImportServicios(sh, rows){
+  const errors = [];
+  const built = [];
+  rows.forEach((r, i)=>{
+    const rowNum = i+2;
+    const codigo = String(r['Prestación (código)']||'').trim();
+    const desc = r['Vía / Descripción']||'';
+    const hasFieldData = (sh.fields||[]).some(f=> r[f.label]!==undefined && r[f.label]!=='');
+    if(!codigo && !desc && !hasFieldData) return;
+    if(!codigo){ errors.push(`Fila ${rowNum}: falta el código en "Prestación (código)".`); return; }
+    const servicio = sh.servicios.find(s=> String(s.code)===codigo);
+    if(!servicio){ errors.push(`Fila ${rowNum}: "${codigo}" no es una prestación válida de "${sh.label}".`); return; }
+    const fields = {};
+    let rowOk = true;
+    (sh.fields||[]).forEach(f=>{
+      const raw = r[f.label];
+      if(raw===undefined || raw==='') return;
+      if(f.type!=='text'){
+        const n = Number(raw);
+        if(isNaN(n)){ errors.push(`Fila ${rowNum}: el campo "${f.label}" debe ser numérico (se recibió "${raw}").`); rowOk=false; return; }
+        fields[f.key] = n;
+      } else {
+        fields[f.key] = raw;
+      }
+    });
+    if(rowOk) built.push({ id: uid(), desc, extra:{}, items:[], fields, servicio:{code:servicio.code, desc:servicio.desc} });
+  });
+  if(errors.length){
+    IMPORT_RESULT = { shKey: sh.key, ok:false, title:`No se pudo importar: revisa ${errors.length} dato(s) en el archivo antes de volver a intentarlo.`, messages: errors.slice(0,15) };
+    renderAll();
+    return;
+  }
+  STATE[sh.key].vias = built;
+  saveState();
+  IMPORT_RESULT = { shKey: sh.key, ok:true, title:`Se cargaron ${built.length} detalle(s) desde el archivo, reemplazando los datos anteriores de esta ficha.`, messages: [] };
+  renderAll();
 }
 
 /* ---------- Arranque: exige licencia válida antes de tocar cualquier dato ---------- */
